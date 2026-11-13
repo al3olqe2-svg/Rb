@@ -33,6 +33,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import com.rb.app.data.*
+import com.rb.app.scanner.ScannerScreen
 
 private data class Destination(val route: String, val label: String, val icon: ImageVector)
 private val destinations = listOf(
@@ -73,9 +74,15 @@ fun RbApp(repository: InventoryRepository) = RbTheme {
                 val id = requireNotNull(detailEntry.arguments?.getString("id"))
                 LaunchedEffect(id) { vm.clearError(); vm.select(id) }
                 val sims by vm.sims.collectAsStateWithLifecycle()
-                DetailsScreen(state, id, sims, vm, back = { nav.popBackStack() })
+                DetailsScreen(state, id, sims, vm, back = { nav.popBackStack() }, scan = { nav.navigate("scanGroup/$id") })
             }
-            composable("scan") { LaterScreen("المسح", Icons.Outlined.QrCodeScanner, "المسح بالكاميرا في المرحلة الثانية", "ستتمكن من قراءة أرقام الشرائح ومراجعتها قبل حفظها في المجموعة المختارة.") }
+            composable("scan") { ScannerScreen(repository, state.groups, done = { id -> if (id == null) nav.navigate("groups") else nav.navigate("group/$id") }) }
+            composable("scanGroup/{id}") { scanEntry ->
+                ScannerScreen(repository, state.groups, initial = scanEntry.arguments?.getString("id"), done = { id ->
+                    nav.popBackStack()
+                    if (id != null) nav.navigate("group/$id") { launchSingleTop = true }
+                })
+            }
             composable("archive") { LaterScreen("الأرشيف", Icons.Outlined.Inventory2, "الأرشيف في مرحلة إدارة المخزون", "سيعرض الشرائح غير المخصصة لمجموعة. الأرشفة تحتفظ بالشريحة ولا تعني حذفها.") }
             composable("search") { LaterScreen("البحث", Icons.Outlined.Search, "البحث في مرحلة إدارة المخزون", "ستتمكن من البحث بالرقم الكامل أو بجزء منه، وعرض جميع النتائج المتطابقة.") }
         }
@@ -199,7 +206,7 @@ private fun OwnerField(owner: String, change: (String) -> Unit, invalid: Boolean
 }
 
 @Composable
-private fun DetailsScreen(state: InventoryState, id: String, sims: SimsState, vm: InventoryViewModel, back: () -> Unit) {
+private fun DetailsScreen(state: InventoryState, id: String, sims: SimsState, vm: InventoryViewModel, back: () -> Unit, scan: () -> Unit) {
     val summary = state.groups.find { it.group.id == id }
     var editing by rememberSaveable(id) { mutableStateOf(false) }
     var confirming by rememberSaveable(id) { mutableStateOf(false) }
@@ -223,8 +230,9 @@ private fun DetailsScreen(state: InventoryState, id: String, sims: SimsState, vm
                     }
                 }
             }
+            item { Button(onClick = scan, modifier = Modifier.fillMaxWidth()) { Text("مسح وإضافة شرائح") } }
             item { Text("الشرائح المرتبطة · ${summary.simCount}", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-            if (summary.simCount == 0) item { EmptyMessage(Icons.Outlined.SimCard, "لا توجد شرائح بعد", "ستتمكن من إضافة الشرائح عبر المسح في المرحلة الثانية.") }
+            if (summary.simCount == 0) item { EmptyMessage(Icons.Outlined.SimCard, "لا توجد شرائح بعد", "اضغط مسح وإضافة شرائح لبدء جلسة جديدة.") }
             if (sims.groupId != id || sims.loading) {
                 if (summary.simCount > 0) item { CircularProgressIndicator(Modifier.padding(16.dp)) }
             }
@@ -272,7 +280,7 @@ private fun LaterScreen(title: String, icon: ImageVector, heading: String, descr
         PageHeader(title)
         LazyColumn(contentPadding = PaddingValues(top = 40.dp)) {
             item { EmptyMessage(icon, heading, description) }
-            item { Text("هذه الوظيفة غير متاحة في المرحلة الأولى.", Modifier.fillMaxWidth().padding(24.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge) }
+            item { Text("هذه الوظيفة مؤجلة لمرحلة لاحقة.", Modifier.fillMaxWidth().padding(24.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge) }
         }
     }
 }
