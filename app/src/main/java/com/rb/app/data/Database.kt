@@ -45,6 +45,8 @@ interface InventoryDao {
     // One atomic predicate also protects deletion if inventory changes during confirmation.
     @Query("DELETE FROM groups WHERE id = :id AND NOT EXISTS (SELECT 1 FROM sims WHERE groupId = :id)")
     suspend fun deleteEmptyGroup(id: String): Int
+    @Query("UPDATE sims SET groupId = :destination WHERE id = :id")
+    suspend fun moveScannedSim(id: String, destination: String?): Int
     @Insert suspend fun insertSims(sims: List<Sim>)
 }
 

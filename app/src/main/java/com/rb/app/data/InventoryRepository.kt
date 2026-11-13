@@ -48,8 +48,41 @@ class InventoryRepository(private val db: RbDatabase) {
         if (dao.group(id) == null) throw InventoryException.MissingGroup()
         if (dao.deleteEmptyGroup(id) == 0) throw InventoryException.GroupNotEmpty()
     }
-    /** Stage 2 foundation: insert new serials only; conflicts abort the entire batch.
-     * Existing SIMs are never moved implicitly. No transfer/archive mutation is exposed yet.
+    suspend fun reviewScan(serials: List<String>, destination: String?): ScanPlan = db.withTransaction {
+        require(serials.isNotEmpty() && serials.distinct().size == serials.size)
+        require(serials.all(InputRules::validSerial))
+        if (destination != null && dao.group(destination) == null) throw InventoryException.MissingGroup()
+        val existing = findSerials(serials).associateBy { it.serial }
+        ScanPlan(destination, serials.map { serial ->
+            val sim = existing[serial]
+            ScanRow(serial, sim, sim?.groupId?.let { dao.group(it) })
+        })
+    }
+
+    /** Re-check the exact reviewed locations under the same write transaction.
+     * A stale plan aborts ALL changes, including inserts. Approval never follows a SIM to a new location.
+     */
+    suspend fun saveScan(plan: ScanPlan, approvedTransfers: Set<String>): ScanResult = db.withTransaction {
+        require(plan.rows.isNotEmpty() && plan.rows.map { it.serial }.distinct().size == plan.rows.size)
+        require(plan.rows.all { InputRules.validSerial(it.serial) })
+        if (plan.destination != null && dao.group(plan.destination) == null) throw InventoryException.MissingGroup()
+        val current = findSerials(plan.rows.map { it.serial }).associateBy { it.serial }
+        if (plan.rows.any { current[it.serial] != it.existing }) throw StaleScanException()
+        var added = 0; var moved = 0; var ignored = 0
+        for (row in plan.rows) {
+            val existing = row.existing
+            when {
+                existing == null -> { dao.insertSims(listOf(Sim(serial = row.serial, groupId = plan.destination))); added++ }
+                existing.groupId == plan.destination -> ignored++
+                row.serial in approvedTransfers -> { check(dao.moveScannedSim(existing.id, plan.destination) == 1); moved++ }
+                else -> ignored++
+            }
+        }
+        ScanResult(added, moved, ignored)
+    }
+
+    /** Insert-only API retained for Stage 1 callers; conflicts abort the entire batch.
+     * The scanner uses reviewScan/saveScan for reviewed, explicitly approved transfers.
      */
     suspend fun addNewSims(serials: List<String>, groupId: String?) = db.withTransaction {
         require(serials.all(InputRules::validSerial)) { "Invalid serial" }
@@ -58,3 +91,9 @@ class InventoryRepository(private val db: RbDatabase) {
         dao.insertSims(serials.map { Sim(serial = it, groupId = groupId) })
     }
 }
+
+
+data class ScanRow(val serial: String, val existing: Sim?, val source: Group?)
+data class ScanPlan(val destination: String?, val rows: List<ScanRow>)
+data class ScanResult(val added: Int, val moved: Int, val ignored: Int)
+class StaleScanException : Exception("تغير موقع إحدى الشرائح منذ المراجعة. حدّث الحالات ووافق على النقل من جديد.")

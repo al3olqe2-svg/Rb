@@ -32,9 +32,9 @@ class NavigationTest {
 
     // Robolectric #8460: explicit w/h qualifiers loop with a focused dialog text field.
     @Config(qualifiers = "xhdpi")
-    @Test fun navigationPlaceholdersAndGroupLifecycle() {
+    @Test fun navigationScannerAndGroupLifecycle() {
         compose.onNodeWithText("المسح").performClick()
-        compose.onNodeWithText("المسح بالكاميرا في المرحلة الثانية").assertIsDisplayed()
+        compose.onNodeWithText("امسح الشرائح تباعًا").assertIsDisplayed()
         compose.onNodeWithText("الأرشيف", useUnmergedTree = true).performClick()
         compose.onNodeWithText("الأرشيف في مرحلة إدارة المخزون").assertIsDisplayed()
         compose.onNodeWithText("البحث", useUnmergedTree = true).performClick()
