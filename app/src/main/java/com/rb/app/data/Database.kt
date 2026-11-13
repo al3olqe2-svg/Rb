@@ -23,6 +23,8 @@ data class Sim(
     val groupId: String? = null,
 ) { @get:Ignore val last4: String get() = serial.takeLast(4) }
 
+data class InventoryRow(@Embedded val sim: Sim, val groupCode: String?, val ownerName: String?)
+
 data class GroupSummary(@Embedded val group: Group, val simCount: Int)
 
 @Dao
@@ -47,6 +49,19 @@ interface InventoryDao {
     suspend fun deleteEmptyGroup(id: String): Int
     @Query("UPDATE sims SET groupId = :destination WHERE id = :id")
     suspend fun moveScannedSim(id: String, destination: String?): Int
+    @Query("""SELECT sims.*, groups.code AS groupCode, groups.ownerName AS ownerName
+        FROM sims LEFT JOIN groups ON sims.groupId = groups.id
+        WHERE (:global OR sims.groupId IS :groupId) AND instr(sims.serial, :query) > 0
+        ORDER BY length(ltrim(serial, '0')), ltrim(serial, '0'), serial, sims.id""")
+    fun observeInventory(global: Boolean, groupId: String?, query: String): Flow<List<InventoryRow>>
+    @Query("SELECT COUNT(*) FROM sims WHERE groupId IS :groupId")
+    fun observeCount(groupId: String?): Flow<Int>
+    @Query("SELECT * FROM sims WHERE id IN (:ids)")
+    suspend fun findIds(ids: List<String>): List<Sim>
+    @Query("UPDATE sims SET groupId = :destination WHERE id IN (:ids)")
+    suspend fun moveInventory(ids: List<String>, destination: String?): Int
+    @Query("DELETE FROM sims WHERE id IN (:ids)")
+    suspend fun deleteInventory(ids: List<String>): Int
     @Insert suspend fun insertSims(sims: List<Sim>)
 }
 

@@ -30,6 +30,25 @@ class InventoryRepository(private val db: RbDatabase) {
     suspend fun findSerials(serials: List<String>): List<Sim> =
         serials.chunked(900).flatMap { dao.findSerials(it) }
 
+    fun inventory(global: Boolean, groupId: String?, query: String) =
+        dao.observeInventory(global, groupId, InputRules.code(query))
+    fun count(groupId: String?) = dao.observeCount(groupId)
+
+    /** Exact reviewed records only; changed/deleted rows abort the whole operation.
+     * Chunk every IN clause below SQLite's parameter limit, within ONE transaction.
+     */
+    suspend fun changeInventory(expected: List<Sim>, destination: String?, delete: Boolean = false): Int = db.withTransaction {
+        require(expected.isNotEmpty() && expected.map { it.id }.distinct().size == expected.size)
+        if (!delete && destination != null && dao.group(destination) == null) throw InventoryException.MissingGroup()
+        val current = expected.map { it.id }.chunked(900).flatMap { dao.findIds(it) }.associateBy { it.id }
+        if (expected.any { current[it.id] != it }) throw StaleInventoryException()
+        expected.map { it.id }.chunked(900).sumOf { ids ->
+            val changed = if (delete) dao.deleteInventory(ids) else dao.moveInventory(ids, destination)
+            check(changed == ids.size)
+            changed
+        }
+    }
+
     suspend fun createGroup(rawCode: String, owner: String): String {
         val code = InputRules.code(rawCode)
         if (!InputRules.validCode(code)) throw InventoryException.InvalidCode()
@@ -97,3 +116,5 @@ data class ScanRow(val serial: String, val existing: Sim?, val source: Group?)
 data class ScanPlan(val destination: String?, val rows: List<ScanRow>)
 data class ScanResult(val added: Int, val moved: Int, val ignored: Int)
 class StaleScanException : Exception("تغير موقع إحدى الشرائح منذ المراجعة. حدّث الحالات ووافق على النقل من جديد.")
+
+class StaleInventoryException : Exception("تغيرت الشرائح منذ التحديد. حدّث القائمة وحددها مجددًا؛ لم يُنفذ أي تغيير.")

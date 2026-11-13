@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
@@ -72,9 +71,8 @@ fun RbApp(repository: InventoryRepository) = RbTheme {
             composable("create") { CreateScreen(vm, back = { nav.popBackStack() }) }
             composable("group/{id}") { detailEntry ->
                 val id = requireNotNull(detailEntry.arguments?.getString("id"))
-                LaunchedEffect(id) { vm.clearError(); vm.select(id) }
-                val sims by vm.sims.collectAsStateWithLifecycle()
-                DetailsScreen(state, id, sims, vm, back = { nav.popBackStack() }, scan = { nav.navigate("scanGroup/$id") })
+                LaunchedEffect(id) { vm.clearError() }
+                DetailsScreen(repository, state, id, vm, back = { nav.popBackStack() }, scan = { nav.navigate("scanGroup/$id") })
             }
             composable("scan") { ScannerScreen(repository, state.groups, done = { id -> if (id == null) nav.navigate("groups") else nav.navigate("group/$id") }) }
             composable("scanGroup/{id}") { scanEntry ->
@@ -83,8 +81,8 @@ fun RbApp(repository: InventoryRepository) = RbTheme {
                     if (id != null) nav.navigate("group/$id") { launchSingleTop = true }
                 })
             }
-            composable("archive") { LaterScreen("الأرشيف", Icons.Outlined.Inventory2, "الأرشيف في مرحلة إدارة المخزون", "سيعرض الشرائح غير المخصصة لمجموعة. الأرشفة تحتفظ بالشريحة ولا تعني حذفها.") }
-            composable("search") { LaterScreen("البحث", Icons.Outlined.Search, "البحث في مرحلة إدارة المخزون", "ستتمكن من البحث بالرقم الكامل أو بجزء منه، وعرض جميع النتائج المتطابقة.") }
+            composable("archive") { StockScreen(repository, state.groups) }
+            composable("search") { StockScreen(repository, state.groups, global = true) }
         }
     }
 }
@@ -206,7 +204,7 @@ private fun OwnerField(owner: String, change: (String) -> Unit, invalid: Boolean
 }
 
 @Composable
-private fun DetailsScreen(state: InventoryState, id: String, sims: SimsState, vm: InventoryViewModel, back: () -> Unit, scan: () -> Unit) {
+private fun DetailsScreen(repository: InventoryRepository, state: InventoryState, id: String, vm: InventoryViewModel, back: () -> Unit, scan: () -> Unit) {
     val summary = state.groups.find { it.group.id == id }
     var editing by rememberSaveable(id) { mutableStateOf(false) }
     var confirming by rememberSaveable(id) { mutableStateOf(false) }
@@ -217,47 +215,24 @@ private fun DetailsScreen(state: InventoryState, id: String, sims: SimsState, vm
         if (summary == null) {
             if (state.loading) CircularProgressIndicator(Modifier.padding(24.dp))
             else EmptyMessage(Icons.Outlined.FolderOff, "المجموعة غير متاحة", state.error ?: "ارجع إلى المجموعات لعرض القائمة الحالية.")
-        } else LazyColumn(contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            item {
-                Surface(shape = MaterialTheme.shapes.large) {
-                    Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("رقم المجموعة", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
-                        SelectionContainer { NumberText(summary.group.code, large = true) }
-                        HorizontalDivider()
-                        Text("المسؤول", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(summary.group.ownerName, style = MaterialTheme.typography.titleMedium)
-                        OutlinedButton(onClick = { vm.clearError(); editing = true }, enabled = !busy) { Icon(Icons.Outlined.Edit, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("تعديل المسؤول") }
-                    }
+        } else StockScreen(repository, state.groups, groupId = id, header = {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(Modifier.weight(1f)) { NumberText(summary.group.code); Text(summary.group.ownerName, fontWeight = FontWeight.Bold) }
+                    TextButton(onClick = { vm.clearError(); editing = true }, enabled = !busy) { Text("تعديل المسؤول") }
                 }
+                Button(onClick = scan, modifier = Modifier.fillMaxWidth()) { Text("مسح وإضافة شرائح") }
             }
-            item { Button(onClick = scan, modifier = Modifier.fillMaxWidth()) { Text("مسح وإضافة شرائح") } }
-            item { Text("الشرائح المرتبطة · ${summary.simCount}", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-            if (summary.simCount == 0) item { EmptyMessage(Icons.Outlined.SimCard, "لا توجد شرائح بعد", "اضغط مسح وإضافة شرائح لبدء جلسة جديدة.") }
-            if (sims.groupId != id || sims.loading) {
-                if (summary.simCount > 0) item { CircularProgressIndicator(Modifier.padding(16.dp)) }
-            }
-            if (sims.groupId == id && sims.error != null) item { ErrorMessage(sims.error) }
-            items(if (sims.groupId == id) sims.rows else emptyList(), key = { it.id }) { sim ->
-                Surface(shape = MaterialTheme.shapes.medium) {
-                    SelectionContainer {
-                        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            NumberText(sim.last4, large = true)
-                            Text(sim.serial, fontFamily = NumberFont, style = TextStyle(textDirection = TextDirection.Ltr, fontSize = 14.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-            }
-            item {
-                HorizontalDivider(Modifier.padding(vertical = 12.dp))
+        }, footer = {
+            Column(Modifier.padding(16.dp)) {
                 ErrorMessage(error)
                 OutlinedButton(onClick = { vm.clearError(); confirming = true }, enabled = summary.simCount == 0 && !busy,
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error), modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Outlined.DeleteOutline, null); Spacer(Modifier.width(8.dp)); Text("حذف المجموعة")
                 }
-                Text(if (summary.simCount > 0) "لا يمكن حذف مجموعة تحتوي على شرائح." else "يمكن حذف المجموعة ما دامت فارغة.",
-                    Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(if (summary.simCount > 0) "لا يمكن حذف مجموعة تحتوي على شرائح." else "يمكن حذف المجموعة ما دامت فارغة.", style = MaterialTheme.typography.bodySmall)
             }
-        }
+        })
     }
     if (editing && summary != null) {
         var owner by rememberSaveable { mutableStateOf(summary.group.ownerName) }
@@ -272,15 +247,4 @@ private fun DetailsScreen(state: InventoryState, id: String, sims: SimsState, vm
         text = { Column { Text("سيُحذف سجل هذه المجموعة الفارغة. لا يمكن التراجع عن الحذف."); NumberText(summary.group.code); ErrorMessage(error) } },
         confirmButton = { TextButton(enabled = !busy, onClick = { vm.delete(id) { confirming = false; back() } }) { Text("حذف نهائي", color = MaterialTheme.colorScheme.error) } },
         dismissButton = { TextButton(enabled = !busy, onClick = { confirming = false; vm.clearError() }) { Text("إلغاء") } })
-}
-
-@Composable
-private fun LaterScreen(title: String, icon: ImageVector, heading: String, description: String) {
-    Column(Modifier.fillMaxSize()) {
-        PageHeader(title)
-        LazyColumn(contentPadding = PaddingValues(top = 40.dp)) {
-            item { EmptyMessage(icon, heading, description) }
-            item { Text("هذه الوظيفة مؤجلة لمرحلة لاحقة.", Modifier.fillMaxWidth().padding(24.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge) }
-        }
-    }
 }
