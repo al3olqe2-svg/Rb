@@ -3,7 +3,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main, stage-1-foundation, stage-2-sim-scanner]
+    branches: [main, stage-1-foundation, stage-2-sim-scanner, stage-3-inventory]
   workflow_dispatch:
 permissions:
   contents: read
@@ -24,7 +24,7 @@ jobs:
       - run: ./gradlew testDebugUnitTest lintDebug assembleDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: Rb-stage3-debug
+          name: Rb-stage4-debug
           path: app/build/outputs/apk/debug/app-debug.apk
       - uses: actions/upload-artifact@v4
         if: always()
@@ -32,5 +32,6 @@ jobs:
           name: verification-reports
           path: |
             app/build/reports/screenshots/
+            app/build/reports/export/
             app/build/reports/tests/
             app/build/reports/lint-results-debug.html

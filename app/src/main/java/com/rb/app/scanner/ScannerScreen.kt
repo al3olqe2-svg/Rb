@@ -7,8 +7,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.semantics.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
@@ -32,9 +37,10 @@ fun ScannerScreen(repository: InventoryRepository, groups: List<GroupSummary>, i
     var selecting by rememberSaveable { mutableStateOf(false) }
     var edit by rememberSaveable { mutableStateOf<String?>(null) }
     var adding by rememberSaveable { mutableStateOf(false) }
+    val reviewed = remember(state.plan) { state.plan?.rows?.associateBy { it.serial }.orEmpty() }
     val target = state.destination?.let { id -> groups.find { it.group.id == id }?.group?.let { "${it.ownerName} — ${it.code}" } ?: "مجموعة غير متاحة" } ?: "الأرشيف العام"
     BackHandler(enabled = state.camera || state.busy) { if (!state.busy) vm.review() }
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().imePadding()) {
         Text("مسح الشرائح", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         OutlinedButton(onClick = { selecting = true }, enabled = !state.busy && state.result == null, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
             Text("الوجهة: $target · تغيير")
@@ -49,11 +55,15 @@ fun ScannerScreen(repository: InventoryRepository, groups: List<GroupSummary>, i
             }
         } else if (state.camera) {
             CameraPanel(Modifier.fillMaxWidth().weight(1f), vm::reading, vm::error)
-            Surface(color = MaterialTheme.colorScheme.primaryContainer) {
+            val duplicate = state.message.startsWith("موجودة في قائمة الجلسة")
+            Surface(color = if (duplicate) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primaryContainer) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Text("${state.serials.size} شريحة في الجلسة", fontWeight = FontWeight.Bold)
-                    state.last?.let { SerialNumber(it.takeLast(4), large = true) }
-                    Text(state.message, style = MaterialTheme.typography.bodySmall)
+                    state.last?.let { SerialNumber(it.takeLast(4), large = true); SerialNumber(it) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(when { duplicate -> Icons.Outlined.Info; state.last == null -> Icons.Outlined.QrCodeScanner; else -> Icons.Outlined.CheckCircle }, null, Modifier.size(20.dp))
+                        Text(state.message, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                    }
                 }
             }
             if (state.suggestions.isNotEmpty()) {
@@ -75,8 +85,8 @@ fun ScannerScreen(repository: InventoryRepository, groups: List<GroupSummary>, i
                 if (state.busy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
                 if (state.review && state.serials.isNotEmpty()) item { OutlinedButton(onClick = vm::refresh, enabled = !state.busy) { Text("تحديث حالات الشرائح") } }
                 items(state.serials, key = { it }) { serial ->
-                    val row = state.plan?.rows?.find { it.serial == serial }
-                    Surface(shape = MaterialTheme.shapes.medium) {
+                    val row = reviewed[serial]
+                    Surface(shape = MaterialTheme.shapes.medium, color = if (row?.existing != null && row.existing.groupId != state.destination) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface) {
                         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             SerialNumber(serial.takeLast(4), true)
                             SerialNumber(serial)
@@ -100,8 +110,8 @@ fun ScannerScreen(repository: InventoryRepository, groups: List<GroupSummary>, i
                 }
                 item { TextButton(onClick = { adding = true }, enabled = !state.busy) { Text("إدخال يدوي عند تعذر القراءة") } }
             }
-            Surface(shadowElevation = 2.dp) {
-                Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
+                FlowRow(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = vm::camera, enabled = !state.busy, modifier = Modifier.weight(1f)) { Text(if (state.serials.isEmpty()) "بدء الكاميرا" else "إضافة بالكاميرا") }
                     Button(onClick = vm::save, enabled = !state.busy && state.plan != null && state.serials.isNotEmpty(), modifier = Modifier.weight(1f)) { Text(if (state.busy) "جارٍ التحقق…" else "حفظ الدفعة") }
                 }

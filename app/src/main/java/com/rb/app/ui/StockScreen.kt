@@ -2,6 +2,10 @@
 package com.rb.app.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -47,6 +51,7 @@ fun StockScreen(repository: InventoryRepository, groups: List<GroupSummary>, gro
     val error by vm.error.collectAsStateWithLifecycle()
     val message by vm.message.collectAsStateWithLifecycle()
     val count by vm.count.collectAsStateWithLifecycle()
+    val focus = LocalFocusManager.current
     val rows = remember(state.rows, descending) { if (descending) state.rows.asReversed() else state.rows }
     val chosen = remember(rows, selected) { rows.filter { it.sim.id in selected }.map { it.sim } }
     var detailsId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -59,23 +64,26 @@ fun StockScreen(repository: InventoryRepository, groups: List<GroupSummary>, gro
     LaunchedEffect(state) { vm.pruneSelection() }
     BackHandler(chosen.isNotEmpty() && operation == null && !range && detailsId == null) { if (!busy) vm.select(emptySet()) }
     fun prepare(sims: List<Sim>, type: String) {
+        focus.clearFocus()
         vm.clearError(); destination = null; operation = StockOperation(sims.toList(), type)
     }
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().imePadding()) {
         if (global || groupId == null) TopAppBar(title = { Text(if (global) "البحث عن الشرائح" else "الأرشيف العام", fontWeight = FontWeight.Bold) }, windowInsets = WindowInsets(0, 0, 0, 0))
+        if (groupId == null && !global) Text("شرائح محفوظة وغير مخصصة · حدد الشرائح ثم اضغط نقل لإسنادها إلى مجموعة", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(value = query, onValueChange = vm::query, enabled = !busy,
             label = { Text(if (global) "الرقم الكامل أو جزء منه" else "البحث في القائمة") },
             leadingIcon = { Icon(Icons.Outlined.Search, null) },
             trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { vm.query("") }) { Icon(Icons.Outlined.Close, "مسح البحث") } },
-            singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
             textStyle = TextStyle(fontFamily = NumberFont, textDirection = TextDirection.Ltr),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(when { global -> "النتائج · ${rows.size}"; groupId == null -> "الأرشيف · $count"; else -> "الشرائح المرتبطة · $count" }, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+        FlowRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+            Text(when { global && state.loading -> "جارٍ البحث…"; global -> "النتائج · ${rows.size}"; groupId == null -> "الأرشيف · $count"; else -> "الشرائح المرتبطة · $count" }, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
             TextButton(onClick = vm::sort, enabled = !busy) { Text(if (descending) "تنازلي ↓" else "تصاعدي ↑") }
             TextButton(onClick = { range = true }, enabled = !busy && !state.loading && rows.isNotEmpty()) { Text("تحديد نطاق") }
         }
-        if (chosen.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (chosen.isNotEmpty()) FlowRow(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer).padding(horizontal = 16.dp), itemVerticalAlignment = Alignment.CenterVertically) {
             Text("${chosen.size} محددة من ${rows.size}", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
             TextButton(onClick = { vm.select(rows.map { it.sim.id }.toSet()) }, enabled = !busy) { Text("تحديد الكل") }
             TextButton(onClick = { vm.select(emptySet()) }, enabled = !busy) { Text("إلغاء التحديد") }
@@ -96,8 +104,9 @@ fun StockScreen(repository: InventoryRepository, groups: List<GroupSummary>, gro
             items(rows, key = { it.sim.id }) { row ->
                 val sim = row.sim
                 Row(Modifier.fillMaxWidth().combinedClickable(enabled = !busy && !state.loading,
-                    onClick = { if (chosen.isNotEmpty()) vm.toggle(sim.id) else detailsId = sim.id },
+                    onClick = { if (chosen.isNotEmpty()) vm.toggle(sim.id) else { focus.clearFocus(); detailsId = sim.id } },
                     onLongClickLabel = "تحديد الشريحة", onLongClick = { vm.toggle(sim.id) })
+                    .background(if (sim.id in selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
                     .semantics { this.selected = sim.id in selected }.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = sim.id in selected, onCheckedChange = { vm.toggle(sim.id) }, enabled = !busy && !state.loading,
                         modifier = Modifier.semantics { contentDescription = "تحديد ${sim.serial}" })
@@ -106,15 +115,15 @@ fun StockScreen(repository: InventoryRepository, groups: List<GroupSummary>, gro
                         SerialText(sim.serial)
                         if (global) Text(location(row), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    IconButton(onClick = { detailsId = sim.id }, enabled = !busy && !state.loading) { Icon(Icons.Outlined.Info, "تفاصيل ${sim.serial}") }
+                    IconButton(onClick = { focus.clearFocus(); detailsId = sim.id }, enabled = !busy && !state.loading) { Icon(Icons.Outlined.Info, "تفاصيل ${sim.serial}") }
                 }
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
             }
             item { footer() }
         }
         SnackbarHost(snackbar)
-        if (chosen.isNotEmpty()) Surface(tonalElevation = 4.dp, shadowElevation = 4.dp) {
-            Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+        if (chosen.isNotEmpty()) Surface(color = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 1.dp) {
+            FlowRow(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
                 TextButton(enabled = !busy && !state.loading, onClick = { prepare(chosen, "move") }) { Icon(Icons.AutoMirrored.Outlined.DriveFileMove, null); Spacer(Modifier.width(4.dp)); Text("نقل") }
                 if (groupId != null || global) TextButton(enabled = !busy && !state.loading && chosen.any { it.groupId != null }, onClick = { prepare(chosen, "archive") }) { Icon(Icons.Outlined.Archive, null); Spacer(Modifier.width(4.dp)); Text("أرشفة") }
                 TextButton(enabled = !busy && !state.loading, onClick = { prepare(chosen, "delete") }) { Icon(Icons.Outlined.DeleteOutline, null, tint = MaterialTheme.colorScheme.error); Spacer(Modifier.width(4.dp)); Text("حذف", color = MaterialTheme.colorScheme.error) }
@@ -184,7 +193,7 @@ private fun location(row: InventoryRow): String = if (row.sim.groupId == null) "
 @Composable
 private fun SerialText(value: String, prominent: Boolean = false) {
     Text(value, fontFamily = NumberFont, fontWeight = if (prominent) FontWeight.Bold else FontWeight.Normal,
-        style = TextStyle(textDirection = TextDirection.Ltr, fontSize = if (prominent) 22.sp else 13.sp),
+        style = TextStyle(textDirection = TextDirection.Ltr, fontSize = if (prominent) 24.sp else 14.sp, lineHeight = if (prominent) 30.sp else 21.sp),
         color = if (prominent) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
 }
 

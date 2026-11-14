@@ -23,6 +23,10 @@ sealed class InventoryException(message: String) : Exception(message) {
 
 class InventoryRepository(private val db: RbDatabase) {
     private val dao = db.inventory()
+    // A single read transaction keeps both worksheets consistent while inventory changes.
+    suspend fun exportSnapshot(): InventorySnapshot = db.withTransaction {
+        InventorySnapshot(dao.exportGroups(), dao.exportSims())
+    }
     val groups = dao.observeGroups()
     val total = dao.observeTotal()
     fun sims(groupId: String) = dao.observeSims(groupId)
@@ -118,3 +122,5 @@ data class ScanResult(val added: Int, val moved: Int, val ignored: Int)
 class StaleScanException : Exception("تغير موقع إحدى الشرائح منذ المراجعة. حدّث الحالات ووافق على النقل من جديد.")
 
 class StaleInventoryException : Exception("تغيرت الشرائح منذ التحديد. حدّث القائمة وحددها مجددًا؛ لم يُنفذ أي تغيير.")
+
+data class InventorySnapshot(val groups: List<Group>, val sims: List<Sim>)
