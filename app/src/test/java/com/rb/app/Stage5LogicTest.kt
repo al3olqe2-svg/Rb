@@ -17,6 +17,21 @@ class Stage5LogicTest {
         gate.reset()
         assertTrue(gate.accept(ocr(full)).isEmpty())
     }
+    @Test fun oldEvidenceExpiresAndTruncatedSubstringsWaitForFullReading() {
+        var now = 0L
+        val gate = TemporalCapture(clock = { now })
+        repeat(2) { assertTrue(gate.accept(ocr(full)).isEmpty()) }
+        now = 3000
+        assertTrue(gate.accept(ocr(full)).isEmpty())
+        assertTrue(gate.accept(ocr(full)).isEmpty())
+        assertEquals(listOf(full), gate.accept(ocr(full)))
+        val long = full + "0"
+        val partial = TemporalCapture()
+        assertTrue(partial.accept(ocr(long)).isEmpty())
+        repeat(3) { assertTrue(partial.accept(ocr(full)).isEmpty()) }
+        assertTrue(partial.accept(ocr(long)).isEmpty())
+        assertEquals(listOf(long), partial.accept(ocr(long)))
+    }
     @Test fun transientConflictsNeverInventDigitsAndStableConflictsRemainSelectable() {
         val other = "8996603421269968999"
         val gate = TemporalCapture()

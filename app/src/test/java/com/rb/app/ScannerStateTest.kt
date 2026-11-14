@@ -118,4 +118,18 @@ class ScannerStateTest {
         assertEquals(13, repo.sims(target).first().size)
     }
 
+    @Test fun scannedGroupCodeRemainsUniqueTextWithLeadingZeros() = runTest {
+        val gate = TemporalCapture(group = true)
+        val frame = SerialRecognition.readGroup(listOf("00000055"), listOf("00000055"))
+        gate.accept(frame)
+        val code = gate.accept(frame).single()
+        val id = repo.createGroup(code, "أحمد")
+        assertEquals(code, repo.groups.first().single().group.code)
+        assertEquals(id, repo.groups.first().single().group.id)
+        val duplicate = runCatching { repo.createGroup(code, "سارة") }.exceptionOrNull()
+        assertTrue(duplicate is InventoryException.DuplicateCode)
+        repo.createGroup("55", "سارة")
+        assertEquals(2, repo.groups.first().size)
+    }
+
 }

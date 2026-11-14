@@ -190,7 +190,7 @@ private fun GroupsScreen(state: InventoryState, create: () -> Unit, open: (Strin
                         Icon(Icons.Outlined.Folder, null, tint = MaterialTheme.colorScheme.primary)
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             NumberText(summary.group.code.takeLast(4))
-                            if (summary.group.code.length > 4) NumberText(summary.group.code)
+                            if (summary.group.code.length > 4) Text(summary.group.code, fontFamily = NumberFont, style = MaterialTheme.typography.bodySmall.copy(textDirection = TextDirection.Ltr))
                             Text(summary.group.ownerName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) { NumberText(summary.simCount.toString()); Text("شريحة", style = MaterialTheme.typography.labelSmall) }

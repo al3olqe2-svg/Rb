@@ -53,9 +53,9 @@ fun ScannerScreen(repository: InventoryRepository, groups: List<GroupSummary>, i
             Surface(color = if (duplicate) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primaryContainer) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Text("${state.serials.size} شريحة في الجلسة", fontWeight = FontWeight.Bold)
-                    if (state.suggestions.isEmpty()) state.last?.let { SerialNumber(it.takeLast(4), large = true); SerialNumber(it) }
+                    if (state.suggestions.isEmpty()) state.last?.let { Text("آخر إضافة · ${it.takeLast(4)}", style = MaterialTheme.typography.bodySmall) }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(when { duplicate -> Icons.Outlined.Info; state.last == null -> Icons.Outlined.QrCodeScanner; else -> Icons.Outlined.CheckCircle }, null, Modifier.size(20.dp))
+                        Icon(when { duplicate -> Icons.Outlined.Info; state.suggestions.isNotEmpty() -> Icons.Outlined.CheckCircle; state.last == null -> Icons.Outlined.QrCodeScanner; else -> Icons.Outlined.CheckCircle }, null, Modifier.size(20.dp))
                         Text(state.message, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                     }
                 }

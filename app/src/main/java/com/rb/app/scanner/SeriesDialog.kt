@@ -23,11 +23,11 @@ fun SeriesDialog(dismiss: () -> Unit, add: (String, String) -> Unit) {
     val preview = remember(first, last) { runCatching { SerialSeries.generate(first, last) } }
     AlertDialog(onDismissRequest = dismiss, title = { Text("إضافة سلسلة") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(first, { first = it }, label = { Text("الرقم الأول") },
+            OutlinedTextField(singleLine = true, value = first, onValueChange = { first = it }, label = { Text("الرقم الأول") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 textStyle = TextStyle(textDirection = TextDirection.Ltr),
                 trailingIcon = { IconButton(onClick = { scanning = true }) { Icon(Icons.Outlined.QrCodeScanner, "مسح الرقم الأول") } })
-            OutlinedTextField(last, { last = it }, label = { Text("آخر أربعة أرقام للنهاية") },
+            OutlinedTextField(singleLine = true, value = last, onValueChange = { last = it }, label = { Text("آخر أربعة أرقام للنهاية") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 textStyle = TextStyle(textDirection = TextDirection.Ltr))
             Text("الحد الأقصى 500 شريحة")

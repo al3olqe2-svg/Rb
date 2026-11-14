@@ -22,7 +22,7 @@ class ScannerPermissionTest {
     @Before fun setup() {
         shadowOf(ApplicationProvider.getApplicationContext<RbApplication>()).denyPermissions(Manifest.permission.CAMERA)
         db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), RbDatabase::class.java).build()
-        compose.setContent { RbTheme { ScannerScreen(InventoryRepository(db), emptyList(), done = {}) } }
+        compose.setContent { RbTheme { ScannerScreen(InventoryRepository(db), emptyList(), done = { _, _ -> }) } }
     }
     @After fun close() { db.close() }
     @Test fun cameraPermissionIsRequestedOnlyOnStartAndReviewRemainsAvailable() {
