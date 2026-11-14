@@ -62,6 +62,10 @@ interface InventoryDao {
     suspend fun moveInventory(ids: List<String>, destination: String?): Int
     @Query("DELETE FROM sims WHERE id IN (:ids)")
     suspend fun deleteInventory(ids: List<String>): Int
+    @Query("SELECT * FROM groups ORDER BY length(code), code, id")
+    suspend fun exportGroups(): List<Group>
+    @Query("SELECT * FROM sims ORDER BY length(ltrim(serial, '0')), ltrim(serial, '0'), serial, id")
+    suspend fun exportSims(): List<Sim>
     @Insert suspend fun insertSims(sims: List<Sim>)
 }
 

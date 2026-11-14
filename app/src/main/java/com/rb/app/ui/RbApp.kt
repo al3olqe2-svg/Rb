@@ -23,6 +23,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -45,6 +46,10 @@ private val destinations = listOf(
 @Composable
 fun RbApp(repository: InventoryRepository) = RbTheme {
     val vm: InventoryViewModel = viewModel(factory = viewModelFactory { initializer { InventoryViewModel(repository) } })
+    val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext as android.app.Application
+    val exportVm: com.rb.app.export.ExportViewModel = viewModel(factory = viewModelFactory {
+        initializer { com.rb.app.export.ExportViewModel(repository, appContext) }
+    })
     val state by vm.state.collectAsStateWithLifecycle()
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
@@ -67,7 +72,8 @@ fun RbApp(repository: InventoryRepository) = RbTheme {
         },
     ) { padding ->
         NavHost(navController = nav, startDestination = "groups", modifier = Modifier.padding(padding)) {
-            composable("groups") { GroupsScreen(state, create = { vm.clearError(); nav.navigate("create") }, open = { nav.navigate("group/$it") }) }
+            composable("groups") { GroupsScreen(state, create = { vm.clearError(); nav.navigate("create") }, open = { nav.navigate("group/$it") }, export = { nav.navigate("export") }) }
+            composable("export") { ExportScreen(exportVm) { nav.popBackStack() } }
             composable("create") { CreateScreen(vm, back = { nav.popBackStack() }) }
             composable("group/{id}") { detailEntry ->
                 val id = requireNotNull(detailEntry.arguments?.getString("id"))
@@ -88,10 +94,11 @@ fun RbApp(repository: InventoryRepository) = RbTheme {
 }
 
 @Composable
-private fun PageHeader(title: String, subtitle: String? = null, back: (() -> Unit)? = null) {
+private fun PageHeader(title: String, subtitle: String? = null, back: (() -> Unit)? = null, actions: @Composable RowScope.() -> Unit = {}) {
     Column {
         TopAppBar(title = { Text(title, fontWeight = FontWeight.Bold) }, windowInsets = WindowInsets(0, 0, 0, 0),
             navigationIcon = { if (back != null) IconButton(onClick = back) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "رجوع") } },
+            actions = actions,
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background))
         if (subtitle != null) Text(subtitle, Modifier.padding(horizontal = 24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
     }
@@ -100,7 +107,7 @@ private fun PageHeader(title: String, subtitle: String? = null, back: (() -> Uni
 @Composable
 private fun NumberText(value: String, modifier: Modifier = Modifier, large: Boolean = false) {
     Text(value, modifier, fontFamily = NumberFont, fontWeight = FontWeight.SemiBold,
-        style = TextStyle(textDirection = TextDirection.Ltr, fontSize = if (large) 28.sp else 18.sp))
+        style = TextStyle(textDirection = TextDirection.Ltr, fontSize = if (large) 28.sp else 18.sp, lineHeight = if (large) 34.sp else 25.sp))
 }
 
 @Composable
@@ -121,37 +128,61 @@ private fun ErrorMessage(message: String?) {
 }
 
 @Composable
-private fun GroupsScreen(state: InventoryState, create: () -> Unit, open: (String) -> Unit) {
+private fun GroupsScreen(state: InventoryState, create: () -> Unit, open: (String) -> Unit, export: () -> Unit) {
+    var filter by rememberSaveable { mutableStateOf("") }
+    val visibleGroups = remember(state.groups, filter) {
+        val text = InputRules.code(filter)
+        state.groups.filter { it.group.code.contains(text) || it.group.ownerName.contains(filter.trim(), ignoreCase = true) }
+    }
     Column(Modifier.fillMaxSize()) {
-        PageHeader("المجموعات", "Rb  /  إدارة الشرائح محليًا")
-        LazyColumn(contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        PageHeader("المجموعات", "Rb  /  إدارة الشرائح محليًا", actions = {
+            var menu by remember { mutableStateOf(false) }
+            Box {
+                IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "قائمة التطبيق") }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text("تصدير إلى Excel") }, leadingIcon = { Icon(Icons.Outlined.TableView, null) }, onClick = { menu = false; export() })
+                }
+            }
+        })
+        LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item {
                 Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = MaterialTheme.shapes.large) {
-                    Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("إجمالي الشرائح", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                        Column {
+                            Text("إجمالي الشرائح", style = MaterialTheme.typography.titleMedium)
+                            Text("في المجموعات والأرشيف", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
                         NumberText(state.total.toString(), large = true)
-                        Text("في المجموعات والأرشيف", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
                     }
                 }
             }
             item {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                FlowRow(Modifier.fillMaxWidth(), itemVerticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("مجموعاتك · ${state.groups.size}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     FilledTonalButton(onClick = create) { Icon(Icons.Outlined.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("إنشاء مجموعة") }
                 }
+            }
+            item {
+                OutlinedTextField(filter, { filter = it }, label = { Text("بحث المجموعات") }, placeholder = { Text("رقم المجموعة أو المسؤول") },
+                    leadingIcon = { Icon(Icons.Outlined.Search, null) }, singleLine = true,
+                    trailingIcon = { if (filter.isNotEmpty()) IconButton(onClick = { filter = "" }) { Icon(Icons.Outlined.Close, "مسح فلتر المجموعات") } },
+                    modifier = Modifier.fillMaxWidth())
+            }
+            if (!state.loading && state.groups.isNotEmpty() && visibleGroups.isEmpty()) item {
+                EmptyMessage(Icons.Outlined.SearchOff, "لا توجد مجموعات مطابقة", "غيّر رقم المجموعة أو اسم المسؤول أو امسح البحث.")
             }
             when {
                 state.loading -> item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
                 state.error != null -> item { ErrorMessage(state.error) }
                 state.groups.isEmpty() -> item { EmptyMessage(Icons.Outlined.FolderOpen, "ابدأ بمجموعتك الأولى", "أنشئ مجموعة برقمها واسم المسؤول عنها. ستظهر أعداد الشرائح هنا تلقائيًا.") }
             }
-            items(state.groups, key = { it.group.id }) { summary ->
+            items(visibleGroups, key = { it.group.id }) { summary ->
                 Surface(onClick = { open(summary.group.id) }, shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface) {
-                    Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Outlined.Folder, null, tint = MaterialTheme.colorScheme.primary)
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             NumberText(summary.group.code)
-                            Text(summary.group.ownerName, style = MaterialTheme.typography.bodyMedium)
+                            Text(summary.group.ownerName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) { NumberText(summary.simCount.toString()); Text("شريحة", style = MaterialTheme.typography.labelSmall) }
                         Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -164,6 +195,7 @@ private fun GroupsScreen(state: InventoryState, create: () -> Unit, open: (Strin
 
 @Composable
 private fun CreateScreen(vm: InventoryViewModel, back: () -> Unit) {
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
     var code by rememberSaveable { mutableStateOf("") }
     var owner by rememberSaveable { mutableStateOf("") }
     var submitted by rememberSaveable { mutableStateOf(false) }
@@ -171,7 +203,7 @@ private fun CreateScreen(vm: InventoryViewModel, back: () -> Unit) {
     val error by vm.error.collectAsStateWithLifecycle()
     val badCode = submitted && !InputRules.validCode(InputRules.code(code))
     val badOwner = submitted && !InputRules.validOwner(owner)
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().imePadding()) {
         PageHeader("إنشاء مجموعة", back = back)
         LazyColumn(contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             item { Text("مجموعة جديدة، تنظيم أوضح", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
@@ -186,7 +218,7 @@ private fun CreateScreen(vm: InventoryViewModel, back: () -> Unit) {
             item { OwnerField(owner, { owner = it; vm.clearError() }, badOwner, !busy) }
             item {
                 ErrorMessage(error)
-                Button(onClick = { submitted = true; if (InputRules.validCode(InputRules.code(code)) && InputRules.validOwner(owner)) vm.create(code, owner, back) },
+                Button(onClick = { submitted = true; if (InputRules.validCode(InputRules.code(code)) && InputRules.validOwner(owner)) { focus.clearFocus(); vm.create(code, owner, back) } },
                     enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
                     if (busy) CircularProgressIndicator(Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp) else Icon(Icons.Outlined.Check, null)
                     Spacer(Modifier.width(8.dp)); Text(if (busy) "جارٍ الحفظ…" else "حفظ المجموعة")

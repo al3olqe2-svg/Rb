@@ -1,6 +1,11 @@
 package com.rb.app.ui
 
 import androidx.compose.material3.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
@@ -27,7 +32,15 @@ private val Colors = lightColorScheme(
 @Composable
 fun RbTheme(content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-        MaterialTheme(colorScheme = Colors, typography = Typography(), content = content)
+        MaterialTheme(colorScheme = Colors, shapes = Shapes(extraSmall = RoundedCornerShape(6.dp), small = RoundedCornerShape(8.dp),
+            medium = RoundedCornerShape(12.dp), large = RoundedCornerShape(16.dp), extraLarge = RoundedCornerShape(20.dp)),
+            typography = Typography(
+                titleLarge = TextStyle(fontSize = 22.sp, lineHeight = 32.sp, fontWeight = FontWeight.Bold),
+                titleMedium = TextStyle(fontSize = 17.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold),
+                bodyLarge = TextStyle(fontSize = 16.sp, lineHeight = 26.sp),
+                bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 23.sp),
+                bodySmall = TextStyle(fontSize = 12.sp, lineHeight = 20.sp),
+                labelLarge = TextStyle(fontSize = 14.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold)), content = content)
     }
 }
 val NumberFont = FontFamily.Monospace
