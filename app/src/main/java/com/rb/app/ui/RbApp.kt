@@ -83,7 +83,11 @@ fun RbApp(repository: InventoryRepository) = RbTheme {
         },
     ) { padding ->
         NavHost(navController = nav, startDestination = "groups", modifier = Modifier.padding(padding)) {
-            composable("groups") { GroupsScreen(state, create = { vm.clearError(); nav.navigate("create") }, open = { nav.navigate("group/$it") }, export = { nav.navigate("export") }) }
+            composable("groups") { GroupsScreen(state, create = { vm.clearError(); nav.navigate("create") }, open = { nav.navigate("group/$it") }, export = { nav.navigate("export") }, history = { nav.navigate("transfers") }) }
+            composable("transfers") { TransferHistoryScreen(repository, back = { nav.popBackStack() }, open = { nav.navigate("transfer/$it") }) }
+            composable("transfer/{id}") { historyEntry ->
+                TransferHistoryScreen(repository, id = requireNotNull(historyEntry.arguments?.getString("id")), back = { nav.popBackStack() })
+            }
             composable("export") { ExportScreen(exportVm) { nav.popBackStack() } }
             composable("create") { CreateScreen(vm, back = { nav.popBackStack() }) }
             composable("group/{id}") { detailEntry ->
@@ -136,7 +140,7 @@ private fun ErrorMessage(message: String?) {
 }
 
 @Composable
-private fun GroupsScreen(state: InventoryState, create: () -> Unit, open: (String) -> Unit, export: () -> Unit) {
+private fun GroupsScreen(state: InventoryState, create: () -> Unit, open: (String) -> Unit, export: () -> Unit, history: () -> Unit) {
     var filter by rememberSaveable { mutableStateOf("") }
     val visibleGroups = remember(state.groups, filter) {
         val text = InputRules.code(filter)
@@ -148,6 +152,7 @@ private fun GroupsScreen(state: InventoryState, create: () -> Unit, open: (Strin
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "قائمة التطبيق") }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text("سجل النقل") }, leadingIcon = { Icon(Icons.Outlined.History, null) }, onClick = { menu = false; history() })
                     DropdownMenuItem(text = { Text("تصدير إلى Excel") }, leadingIcon = { Icon(Icons.Outlined.TableView, null) }, onClick = { menu = false; export() })
                 }
             }

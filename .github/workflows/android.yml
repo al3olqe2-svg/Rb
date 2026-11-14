@@ -3,7 +3,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main, stage-1-foundation, stage-2-sim-scanner, stage-3-inventory, stage-4-excel-ux]
+    branches: [main, stage-1-foundation, stage-2-sim-scanner, stage-3-inventory, stage-4-excel-ux, stage-5-stable-release]
   workflow_dispatch:
 permissions:
   contents: read
@@ -36,6 +36,7 @@ jobs:
             adb install app/build/outputs/apk/debug/app-debug.apk
             adb shell am start -W -n com.rb.app/.MainActivity
             adb shell pidof com.rb.app
+            ./gradlew connectedDebugAndroidTest
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell am start -W -n com.rb.app/.MainActivity
             adb shell pidof com.rb.app
@@ -45,13 +46,15 @@ jobs:
             test -z "$(rg 'FATAL EXCEPTION' app/build/reports/device/runtime.log)"
       - uses: actions/upload-artifact@v4
         with:
-          name: Rb-stage5-debug
+          name: Rb-stage6-debug
           path: app/build/outputs/apk/debug/app-debug.apk
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: verification-reports
           path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
             app/build/reports/device/
             app/build/reports/screenshots/
             app/build/reports/export/

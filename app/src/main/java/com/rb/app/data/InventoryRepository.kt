@@ -29,6 +29,25 @@ class InventoryRepository(private val db: RbDatabase) {
     }
     val groups = dao.observeGroups()
     val total = dao.observeTotal()
+    val transferHistory = db.transfers().observeHistory()
+    fun transferDetails(id: String) = db.transfers().observeDetails(id)
+
+    /** Called only inside the same transaction as the successful moves. */
+    private suspend fun recordTransfers(moved: List<Sim>, destination: String?) {
+        if (destination == null) return
+        val target = dao.group(destination) ?: throw InventoryException.MissingGroup()
+        val timestamp = System.currentTimeMillis()
+        moved.filter { it.groupId != null && it.groupId != destination }.groupBy { requireNotNull(it.groupId) }
+            .forEach { (sourceId, sims) ->
+                val source = dao.group(sourceId) ?: throw InventoryException.MissingGroup()
+                val record = TransferRecord(sourceGroupId = sourceId, destinationGroupId = destination,
+                    sourceGroupCodeSnapshot = source.code, sourceOwnerNameSnapshot = source.ownerName,
+                    destinationGroupCodeSnapshot = target.code, destinationOwnerNameSnapshot = target.ownerName,
+                    timestamp = timestamp)
+                db.transfers().insertRecord(record)
+                db.transfers().insertItems(sims.map { TransferRecordItem(transferRecordId = record.id, simSerialSnapshot = it.serial) })
+            }
+    }
     fun sims(groupId: String) = dao.observeSims(groupId)
     fun archive() = dao.observeArchive()
     suspend fun findSerials(serials: List<String>): List<Sim> =
@@ -46,11 +65,14 @@ class InventoryRepository(private val db: RbDatabase) {
         if (!delete && destination != null && dao.group(destination) == null) throw InventoryException.MissingGroup()
         val current = expected.map { it.id }.chunked(900).flatMap { dao.findIds(it) }.associateBy { it.id }
         if (expected.any { current[it.id] != it }) throw StaleInventoryException()
-        expected.map { it.id }.chunked(900).sumOf { ids ->
+        val affected = if (delete) expected else expected.filter { it.groupId != destination }
+        val count = affected.map { it.id }.chunked(900).sumOf { ids ->
             val changed = if (delete) dao.deleteInventory(ids) else dao.moveInventory(ids, destination)
             check(changed == ids.size)
             changed
         }
+        if (!delete) recordTransfers(affected, destination)
+        count
     }
 
     suspend fun createGroup(rawCode: String, owner: String): String {
@@ -101,6 +123,9 @@ class InventoryRepository(private val db: RbDatabase) {
                 else -> ignored++
             }
         }
+        recordTransfers(plan.rows.mapNotNull { row -> row.existing?.takeIf {
+            it.groupId != plan.destination && row.serial in approvedTransfers
+        } }, plan.destination)
         ScanResult(added, moved, ignored)
     }
 
