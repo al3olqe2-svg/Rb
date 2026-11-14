@@ -47,7 +47,17 @@ class Stage5LogicTest {
     }
     @Test fun sessionExclusionsAndShortOcrCannotFreeze() {
         val gate = TemporalCapture()
-        repeat(12) { assertTrue(gate.accept(ocr(full, "1269968985"), setOf(full)).isEmpty()) }
+        repeat(12) { assertTrue(gate.accept(ocr(full, full.dropLast(2), "8985"), setOf(full)).isEmpty()) }
+    }
+    @Test fun nonstandardOcrLengthsRemainAvailableAfterStrongerConsensus() {
+        val gate = TemporalCapture()
+        val unusual = "00012345678901234567890123"
+        repeat(4) { assertTrue(gate.accept(ocr(unusual)).isEmpty()) }
+        assertEquals(listOf(unusual), gate.accept(ocr(unusual)))
+        val confirmed = TemporalCapture()
+        repeat(10) {
+            assertTrue(confirmed.accept(ocr(full, full.dropLast(1)), setOf(full)).isEmpty())
+        }
     }
     @Test fun groupModeSupportsShortAndLeadingZeroCodesWithoutSimRules() {
         val gate = TemporalCapture(group = true)

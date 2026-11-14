@@ -45,7 +45,7 @@ class ScannerViewModel(
         if (!state.value.camera || state.value.busy) return
         val choices = stable.accept(reading, session.serials.toSet())
         if (choices.isNotEmpty()) set(state.value.copy(suggestions = choices,
-            message = "الرقم جاهز للتأكيد — طابق جميع الخانات", error = null))
+            message = if (choices.any { it.length !in 19..20 }) "قراءة بطول غير معتاد — طابق الرقم كاملًا" else "الرقم جاهز للتأكيد — طابق جميع الخانات", error = null))
     }
     fun rescan() {
         stable.reset()

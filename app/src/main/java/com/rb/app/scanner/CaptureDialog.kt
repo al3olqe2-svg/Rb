@@ -26,7 +26,7 @@ fun CaptureDialog(group: Boolean = false, dismiss: () -> Unit, confirm: (String)
                 CameraPanel(Modifier.fillMaxWidth().weight(1f), { if (choices.isEmpty()) choices = gate.accept(it) }, { error = it }, group)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 if (choices.isNotEmpty()) {
-                    Text("جاهز للتأكيد")
+                    Text(if (!group && choices.any { it.length !in 19..20 }) "قراءة بطول غير معتاد — طابق الرقم كاملًا" else "جاهز للتأكيد")
                     LazyColumn(Modifier.heightIn(max = 220.dp)) {
                         items(choices) { value ->
                             TextButton(onClick = { confirm(value) }) { Column { SerialNumber(value.takeLast(4), true); SerialNumber(value); Text("تأكيد الرقم") } }

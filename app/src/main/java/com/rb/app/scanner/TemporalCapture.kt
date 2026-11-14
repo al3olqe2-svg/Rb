@@ -6,6 +6,7 @@ class TemporalCapture(
     private val windowSize: Int = 7,
     private val textHits: Int = 3,
     private val barcodeHits: Int = 2,
+    private val nonstandardTextHits: Int = 5,
     private val group: Boolean = false,
     private val maxGapMillis: Long = 2500,
     private val clock: () -> Long = { System.nanoTime() / 1_000_000 },
@@ -21,18 +22,21 @@ class TemporalCapture(
         lastFrame = now
         frames.addLast(reading)
         while (frames.size > windowSize) frames.removeFirst()
-        val values = frames.flatMap { it.candidates }.distinct().filter { it !in excluded }
+        val observed = frames.flatMap { it.candidates }.distinct()
+        val values = observed.filter { value ->
+            value !in excluded && excluded.none { it.length > value.length && it.contains(value) }
+        }
         val ready = values.filter { value ->
             val hits = frames.count { value in it.candidates }
             val bars = frames.count { value in it.barcodeCandidates }
-            val plausible = group || value.length in 19..20 || bars >= barcodeHits
-            plausible && (bars >= barcodeHits || hits >= textHits)
+            val requiredTextHits = if (group || value.length in 19..20) textHits else nonstandardTextHits
+            bars >= barcodeHits || hits >= requiredTextHits
         }
         // A longer observed reading blocks its truncated substring; unrelated strings stay separate.
-        fun complete(value: String) = values.none { it.length > value.length && it.contains(value) }
+        fun complete(value: String) = observed.none { it.length > value.length && it.contains(value) }
         val completeReady = ready.filter(::complete)
         val corroborated = if (completeReady.isEmpty()) emptyList() else (completeReady + values.filter { v ->
-            frames.count { v in it.candidates } >= 2 && (group || v.length in 19..20)
+            frames.count { v in it.candidates } >= 2 && (group || v.length in 19..20 || frames.count { v in it.candidates } >= nonstandardTextHits)
         }).distinct()
         val choices = corroborated.filter(::complete).sortedWith(compareByDescending<String> { v -> frames.count { v in it.barcodeCandidates } }.thenBy { it })
         if (choices.isNotEmpty()) frozen = choices
