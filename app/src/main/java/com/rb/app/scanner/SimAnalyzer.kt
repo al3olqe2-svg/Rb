@@ -41,11 +41,21 @@ class SimAnalyzer(private val callbackExecutor: Executor,
                             if (!closed.get()) {
                                 if (!bars.isSuccessful || !ocr.isSuccessful) error()
                                 // A failed OCR task cannot corroborate a barcode: require explicit review.
-                                val recognize = if (group) SerialRecognition::readGroup else SerialRecognition::read
-                                val reading = recognize(
+                                val reading = if (group) {
+                                    fun points(points: Array<android.graphics.Point>?) = points.orEmpty().map {
+                                        GroupLabelScanner.Point(it.x.toDouble(), it.y.toDouble())
+                                    }
+                                    GroupLabelScanner.read(
+                                        if (bars.isSuccessful) bars.result.mapNotNull { bar -> bar.rawValue?.let {
+                                            GroupLabelScanner.Observation(it, points(bar.cornerPoints))
+                                        } } else emptyList(),
+                                        if (ocr.isSuccessful) ocr.result.textBlocks.flatMap { it.lines }.map {
+                                            GroupLabelScanner.Observation(it.text, points(it.cornerPoints), it.angle.toDouble())
+                                        } else emptyList())
+                                } else SerialRecognition.read(
                                     if (bars.isSuccessful) bars.result.mapNotNull { it.rawValue } else emptyList(),
                                     if (ocr.isSuccessful) ocr.result.textBlocks.flatMap { it.lines }.map { it.text } else emptyList())
-                                result(if (bars.isSuccessful && ocr.isSuccessful) reading else reading.copy(automatic = false))
+                                result(if (bars.isSuccessful && ocr.isSuccessful) reading else reading.copy(automatic = false, groupUpperCandidate = null))
                             }
                         } finally { finish() }
                     }

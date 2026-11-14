@@ -67,7 +67,7 @@ fun CameraPanel(modifier: Modifier, reading: (SerialRecognition.Reading) -> Unit
     Box(modifier) {
         AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
         Box(Modifier.align(Alignment.Center).fillMaxWidth(.88f).height(140.dp).border(1.dp, Color.White, MaterialTheme.shapes.medium))
-        Text(if (group) "رقم المجموعة داخل الإطار · المس للتركيز" else "شريحة واحدة · قرّب الرقم داخل الإطار · المس للتركيز", Modifier.align(Alignment.TopCenter).padding(8.dp), color = Color.White,
+        Text(if (group) "أظهر الملصق كاملًا والباركودين · المس للتركيز" else "شريحة واحدة · قرّب الرقم داخل الإطار · المس للتركيز", Modifier.align(Alignment.TopCenter).padding(8.dp), color = Color.White,
             style = MaterialTheme.typography.labelSmall)
         if (camera?.cameraInfo?.hasFlashUnit() == true) FilledTonalButton(onClick = { torch = !torch }, modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)) {
             Text(if (torch) "إطفاء الإضاءة" else "إضاءة")

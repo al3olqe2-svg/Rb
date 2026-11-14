@@ -6,6 +6,6 @@ import com.rb.app.data.InventoryRepository
 import com.rb.app.data.RbDatabase
 
 class RbApplication : Application() {
-    val database by lazy { Room.databaseBuilder(this, RbDatabase::class.java, "rb.db").build() }
+    val database by lazy { Room.databaseBuilder(this, RbDatabase::class.java, "rb.db").addMigrations(RbDatabase.MIGRATION_1_2).build() }
     val repository by lazy { InventoryRepository(database) }
 }

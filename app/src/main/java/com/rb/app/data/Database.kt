@@ -69,5 +69,24 @@ interface InventoryDao {
     @Insert suspend fun insertSims(sims: List<Sim>)
 }
 
-@Database(entities = [Group::class, Sim::class], version = 1, exportSchema = true)
-abstract class RbDatabase : RoomDatabase() { abstract fun inventory(): InventoryDao }
+@Database(entities = [Group::class, Sim::class, TransferRecord::class, TransferRecordItem::class], version = 2, exportSchema = true)
+abstract class RbDatabase : RoomDatabase() {
+    abstract fun inventory(): InventoryDao
+    abstract fun transfers(): TransferDao
+    companion object {
+        val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS transfer_records (
+                    id TEXT NOT NULL PRIMARY KEY, sourceGroupId TEXT NOT NULL, destinationGroupId TEXT NOT NULL,
+                    sourceGroupCodeSnapshot TEXT NOT NULL, sourceOwnerNameSnapshot TEXT NOT NULL,
+                    destinationGroupCodeSnapshot TEXT NOT NULL, destinationOwnerNameSnapshot TEXT NOT NULL,
+                    timestamp INTEGER NOT NULL)""")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_transfer_records_timestamp ON transfer_records(timestamp)")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS transfer_record_items (
+                    id TEXT NOT NULL PRIMARY KEY, transferRecordId TEXT NOT NULL, simSerialSnapshot TEXT NOT NULL,
+                    FOREIGN KEY(transferRecordId) REFERENCES transfer_records(id) ON UPDATE NO ACTION ON DELETE CASCADE)""")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_transfer_record_items_transferRecordId ON transfer_record_items(transferRecordId)")
+            }
+        }
+    }
+}

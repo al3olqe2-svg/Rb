@@ -4,7 +4,7 @@ import com.rb.app.data.InputRules
 
 /** Heuristics select candidates, never repair digits. Nonstandard serials remain available for explicit review. */
 object SerialRecognition {
-    data class Reading(val candidates: List<String>, val automatic: Boolean, val barcode: Boolean, val barcodeCandidates: List<String> = if (barcode) candidates else emptyList())
+    data class Reading(val candidates: List<String>, val automatic: Boolean, val barcode: Boolean, val barcodeCandidates: List<String> = if (barcode) candidates else emptyList(), val groupUpperCandidate: String? = null)
     private val label = Regex("(?i)^(?:ICCID|ICC\\s*ID|SIM(?:\\s*(?:ID|NO))?|SERIAL(?:\\s*NO)?|S/N)\\s*[:#：-]?\\s*")
     private val longRun = Regex("(?<![A-Za-z0-9])[0-9]{10,64}(?![A-Za-z0-9])")
     fun normalize(raw: String): String = InputRules.code(raw).filterNot { it.isWhitespace() || it == '-' }
