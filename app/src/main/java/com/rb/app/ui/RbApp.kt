@@ -32,6 +32,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
+import kotlinx.coroutines.launch
 import com.rb.app.data.*
 import com.rb.app.scanner.ScannerScreen
 
@@ -55,7 +56,17 @@ fun RbApp(repository: InventoryRepository) = RbTheme {
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route ?: "groups"
     val mainDestination = destinations.any { it.route == route }
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val finishScan: (String?, ScanResult) -> Unit = { id, result ->
+        nav.navigate(if (id == null) "archive" else "group/$id") {
+            popUpTo("groups")
+            launchSingleTop = true
+        }
+        scope.launch { snackbar.showSnackbar("تم حفظ ${result.added + result.moved} شريحة · متجاهلة: ${result.ignored}") }
+    }
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             if (mainDestination) NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
@@ -80,12 +91,9 @@ fun RbApp(repository: InventoryRepository) = RbTheme {
                 LaunchedEffect(id) { vm.clearError() }
                 DetailsScreen(repository, state, id, vm, back = { nav.popBackStack() }, scan = { nav.navigate("scanGroup/$id") })
             }
-            composable("scan") { ScannerScreen(repository, state.groups, done = { id -> if (id == null) nav.navigate("groups") else nav.navigate("group/$id") }) }
+            composable("scan") { ScannerScreen(repository, state.groups, done = finishScan) }
             composable("scanGroup/{id}") { scanEntry ->
-                ScannerScreen(repository, state.groups, initial = scanEntry.arguments?.getString("id"), done = { id ->
-                    nav.popBackStack()
-                    if (id != null) nav.navigate("group/$id") { launchSingleTop = true }
-                })
+                ScannerScreen(repository, state.groups, initial = scanEntry.arguments?.getString("id"), done = finishScan)
             }
             composable("archive") { StockScreen(repository, state.groups) }
             composable("search") { StockScreen(repository, state.groups, global = true) }
@@ -181,7 +189,8 @@ private fun GroupsScreen(state: InventoryState, create: () -> Unit, open: (Strin
                     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Outlined.Folder, null, tint = MaterialTheme.colorScheme.primary)
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            NumberText(summary.group.code)
+                            NumberText(summary.group.code.takeLast(4))
+                            if (summary.group.code.length > 4) Text(summary.group.code, fontFamily = NumberFont, style = MaterialTheme.typography.bodySmall.copy(textDirection = TextDirection.Ltr))
                             Text(summary.group.ownerName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) { NumberText(summary.simCount.toString()); Text("شريحة", style = MaterialTheme.typography.labelSmall) }
@@ -196,6 +205,7 @@ private fun GroupsScreen(state: InventoryState, create: () -> Unit, open: (Strin
 @Composable
 private fun CreateScreen(vm: InventoryViewModel, back: () -> Unit) {
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    var scanning by rememberSaveable { mutableStateOf(false) }
     var code by rememberSaveable { mutableStateOf("") }
     var owner by rememberSaveable { mutableStateOf("") }
     var submitted by rememberSaveable { mutableStateOf(false) }
@@ -205,15 +215,13 @@ private fun CreateScreen(vm: InventoryViewModel, back: () -> Unit) {
     val badOwner = submitted && !InputRules.validOwner(owner)
     Column(Modifier.fillMaxSize().imePadding()) {
         PageHeader("إنشاء مجموعة", back = back)
-        LazyColumn(contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            item { Text("مجموعة جديدة، تنظيم أوضح", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
-            item { Text("رقم المجموعة ثابت بعد إنشائها. يمكنك تعديل اسم المسؤول في أي وقت.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        LazyColumn(contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
                 OutlinedTextField(value = code, onValueChange = { code = it; vm.clearError() }, label = { Text("رقم المجموعة") },
-                    placeholder = { Text("0055") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    trailingIcon = { IconButton(onClick = { scanning = true }, enabled = !busy) { Icon(Icons.Outlined.QrCodeScanner, "مسح رقم المجموعة") } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     textStyle = TextStyle(fontFamily = NumberFont, textDirection = TextDirection.Ltr),
                     singleLine = true, isError = badCode, enabled = !busy, modifier = Modifier.fillMaxWidth(),
-                    supportingText = { Text(if (badCode) "أدخل من 1 إلى 64 خانة رقمية" else "تُحفظ الأصفار في بداية الرقم") })
+                    supportingText = if (badCode) { { Text("أدخل من 1 إلى 64 خانة رقمية") } } else null)
             }
             item { OwnerField(owner, { owner = it; vm.clearError() }, badOwner, !busy) }
             item {
@@ -226,13 +234,15 @@ private fun CreateScreen(vm: InventoryViewModel, back: () -> Unit) {
             }
         }
     }
+    if (scanning) com.rb.app.scanner.CaptureDialog(group = true, dismiss = { scanning = false },
+        confirm = { code = it; scanning = false; vm.clearError() })
 }
 
 @Composable
 private fun OwnerField(owner: String, change: (String) -> Unit, invalid: Boolean, enabled: Boolean) {
     OutlinedTextField(value = owner, onValueChange = change, label = { Text("اسم المسؤول") }, singleLine = true,
         enabled = enabled, isError = invalid, modifier = Modifier.fillMaxWidth(),
-        supportingText = { Text(if (invalid) "أدخل اسمًا من 1 إلى 120 حرفًا" else "الشخص المسؤول عن هذه المجموعة") })
+        supportingText = if (invalid) { { Text("أدخل اسمًا من 1 إلى 120 حرفًا") } } else null)
 }
 
 @Composable

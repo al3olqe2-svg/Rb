@@ -32,19 +32,20 @@ class SerialRecognitionTest {
         assertEquals(listOf("00012345678901234567890123"), SerialRecognition.read(listOf("00012345678901234567890123"), emptyList()).candidates)
         assertFalse(SerialRecognition.read(listOf("00012345678901234567890123"), emptyList()).automatic)
     }
-    @Test fun neverJoinsDifferentOcrLinesAndRequiresConsecutiveFrames() {
+    @Test fun neverJoinsDifferentOcrLinesAndRequiresMultipleFrames() {
         val split = SerialRecognition.read(emptyList(), listOf("899660343", "0263612277"))
         assertFalse(printed in split.candidates)
         assertFalse(split.automatic)
         val barcode = SerialRecognition.read(listOf(valid), listOf(valid))
         assertTrue(barcode.automatic)
-        val gate = StableReading()
-        assertNull(gate.accept(barcode)); assertEquals(valid, gate.accept(barcode))
-        gate.accept(SerialRecognition.read(emptyList(), emptyList()))
-        assertNull(gate.accept(barcode))
+        val gate = TemporalCapture()
+        assertTrue(gate.accept(barcode).isEmpty()); assertEquals(listOf(valid), gate.accept(barcode))
+        gate.reset()
+        assertTrue(gate.accept(barcode).isEmpty())
         val ocr = SerialRecognition.read(emptyList(), listOf(valid))
-        val textGate = StableReading()
-        assertNull(textGate.accept(ocr)); assertNull(textGate.accept(ocr)); assertEquals(valid, textGate.accept(ocr))
+        val textGate = TemporalCapture()
+        assertTrue(textGate.accept(ocr).isEmpty()); assertTrue(textGate.accept(ocr).isEmpty())
+        assertEquals(listOf(valid), textGate.accept(ocr))
     }
     @Test fun fullSerialControlsSessionIdentityAndEditsAreRevalidated() {
         val first = "00012345678901234567895555"

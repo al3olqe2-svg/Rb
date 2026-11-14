@@ -3,7 +3,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main, stage-1-foundation, stage-2-sim-scanner, stage-3-inventory]
+    branches: [main, stage-1-foundation, stage-2-sim-scanner, stage-3-inventory, stage-4-excel-ux]
   workflow_dispatch:
 permissions:
   contents: read
@@ -22,15 +22,37 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
       - run: ./gradlew testDebugUnitTest lintDebug assembleDebug
+      - name: Enable emulator acceleration
+        run: |
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+      - name: Install and launch APK on minimum supported Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 26
+          arch: x86_64
+          target: default
+          disable-animations: true
+          script: |
+            adb install app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -W -n com.rb.app/.MainActivity
+            adb shell pidof com.rb.app
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -W -n com.rb.app/.MainActivity
+            adb shell pidof com.rb.app
+            mkdir -p app/build/reports/device
+            adb exec-out screencap -p > app/build/reports/device/api26-launch.png
+            adb logcat -d -s AndroidRuntime:E > app/build/reports/device/runtime.log
+            test -z "$(rg 'FATAL EXCEPTION' app/build/reports/device/runtime.log)"
       - uses: actions/upload-artifact@v4
         with:
-          name: Rb-stage4-debug
+          name: Rb-stage5-debug
           path: app/build/outputs/apk/debug/app-debug.apk
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: verification-reports
           path: |
+            app/build/reports/device/
             app/build/reports/screenshots/
             app/build/reports/export/
             app/build/reports/tests/

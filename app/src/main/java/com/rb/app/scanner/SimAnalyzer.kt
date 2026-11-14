@@ -14,7 +14,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 /** One frame in flight, throttled. Both tasks finish before closing the ImageProxy or their clients. */
 @androidx.annotation.OptIn(ExperimentalGetImage::class)
 class SimAnalyzer(private val callbackExecutor: Executor,
-    private val result: (SerialRecognition.Reading) -> Unit, private val error: () -> Unit,
+    private val result: (SerialRecognition.Reading) -> Unit, private val error: () -> Unit, private val group: Boolean = false,
 ) : ImageAnalysis.Analyzer {
     private val barcode = BarcodeScanning.getClient()
     private val text = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
@@ -41,7 +41,8 @@ class SimAnalyzer(private val callbackExecutor: Executor,
                             if (!closed.get()) {
                                 if (!bars.isSuccessful || !ocr.isSuccessful) error()
                                 // A failed OCR task cannot corroborate a barcode: require explicit review.
-                                val reading = SerialRecognition.read(
+                                val recognize = if (group) SerialRecognition::readGroup else SerialRecognition::read
+                                val reading = recognize(
                                     if (bars.isSuccessful) bars.result.mapNotNull { it.rawValue } else emptyList(),
                                     if (ocr.isSuccessful) ocr.result.textBlocks.flatMap { it.lines }.map { it.text } else emptyList())
                                 result(if (bars.isSuccessful && ocr.isSuccessful) reading else reading.copy(automatic = false))

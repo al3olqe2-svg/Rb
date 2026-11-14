@@ -4,7 +4,7 @@ import com.rb.app.data.InputRules
 
 /** Heuristics select candidates, never repair digits. Nonstandard serials remain available for explicit review. */
 object SerialRecognition {
-    data class Reading(val candidates: List<String>, val automatic: Boolean, val barcode: Boolean)
+    data class Reading(val candidates: List<String>, val automatic: Boolean, val barcode: Boolean, val barcodeCandidates: List<String> = if (barcode) candidates else emptyList())
     private val label = Regex("(?i)^(?:ICCID|ICC\\s*ID|SIM(?:\\s*(?:ID|NO))?|SERIAL(?:\\s*NO)?|S/N)\\s*[:#：-]?\\s*")
     private val longRun = Regex("(?<![A-Za-z0-9])[0-9]{10,64}(?![A-Za-z0-9])")
     fun normalize(raw: String): String = InputRules.code(raw).filterNot { it.isWhitespace() || it == '-' }
@@ -26,7 +26,13 @@ object SerialRecognition {
         val auto = selected.size == 1 && selected.single().let {
             it.startsWith("89") && it.length in 19..20 && luhn(it)
         }
-        return Reading(selected, auto, bars.isNotEmpty())
+        return Reading(selected, auto, bars.isNotEmpty(), bars)
+    }
+    fun readGroup(barcodes: List<String>, lines: List<String>): Reading {
+        fun numeric(raw: String) = normalize(raw).takeIf { InputRules.validCode(it) }
+        val bars = barcodes.mapNotNull(::numeric).distinct()
+        val texts = lines.mapNotNull(::numeric).distinct()
+        return Reading((bars + texts).distinct(), false, bars.isNotEmpty(), bars)
     }
     fun luhn(value: String): Boolean {
         if (!InputRules.validSerial(value)) return false
@@ -34,19 +40,6 @@ object SerialRecognition {
             val n = c - '0'
             if (index % 2 == 0) n else (n * 2).let { if (it > 9) it - 9 else it }
         }.sum() % 10 == 0
-    }
-}
-
-/** Requires consecutive agreeing analyzed frames, including after an ambiguous/empty frame. */
-class StableReading {
-    private var previous: String? = null
-    private var count = 0
-    fun accept(reading: SerialRecognition.Reading): String? {
-        if (!reading.automatic) { previous = null; count = 0; return null }
-        val value = reading.candidates.single()
-        count = if (previous == value) count + 1 else 1
-        previous = value
-        return value.takeIf { count >= if (reading.barcode) 2 else 3 }
     }
 }
 

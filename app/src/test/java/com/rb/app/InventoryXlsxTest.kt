@@ -56,6 +56,17 @@ class InventoryXlsxTest {
         assertTrue(cells(section).any { it.textContent == "مجموعة 0055 — $owner — 2 شرائح" })
         assertTrue(cells(section).any { it.textContent == "الأرشيف العام — 1 شرائح" })
     }
+    @Test fun generatedSeriesExportsEveryDigitAsText() {
+        val rows = com.rb.app.scanner.SerialSeries.generate("0008996603421269968985", "8999")
+        val book = workbook(InventorySnapshot(emptyList(), rows.map { Sim(serial = it) }))
+        for (path in listOf("xl/worksheets/sheet1.xml", "xl/worksheets/sheet2.xml")) {
+            val exported = cells(book.getValue(path))
+            rows.forEach { serial ->
+                val cell = exported.single { it.textContent == serial }
+                assertEquals("inlineStr", cell.getAttribute("t"))
+            }
+        }
+    }
     @Test fun emptyGroupsAndEmptyInventoryStillProduceValidWorkbook() {
         val book = workbook(InventorySnapshot(listOf(Group(id = "empty", code = "0000", ownerName = "مسؤول")), emptyList()))
         assertTrue(cells(book.getValue("xl/worksheets/sheet1.xml")).any { it.textContent.contains("مجموعة 0000 — مسؤول — 0 شرائح") })
