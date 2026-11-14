@@ -70,10 +70,52 @@ class ScannerStateTest {
         scanner.save()
         scanner.state.first { !it.busy && it.error != null }
         assertEquals(2, scanner.state.value.serials.size)
+        assertNull(scanner.state.value.result)
+        assertTrue(scanner.state.value.review)
         assertNull(repo.findSerials(listOf("00010000")).single().groupId)
         db.openHelper.writableDatabase.execSQL("DROP TRIGGER fail_scan")
         scanner.save()
         scanner.state.first { !it.busy && it.result != null }
         assertEquals(2, repo.sims(group).first().size)
     }
+    @Test fun stableCaptureRequiresConfirmationAndSuppressesConfirmedSim() = runTest {
+        val scanner = vm()
+        val serial = "8996603421269968985"
+        val reading = SerialRecognition.read(emptyList(), listOf(serial))
+        scanner.camera()
+        repeat(3) { scanner.reading(reading) }
+        assertEquals(listOf(serial), scanner.state.value.suggestions)
+        assertTrue(scanner.state.value.serials.isEmpty())
+        repeat(5) { scanner.reading(SerialRecognition.read(emptyList(), listOf("8996603421269968999"))) }
+        assertEquals(listOf(serial), scanner.state.value.suggestions)
+        scanner.confirm(serial); scanner.confirm(serial)
+        repeat(10) { scanner.reading(reading) }
+        assertEquals(listOf(serial), scanner.state.value.serials)
+        assertTrue(scanner.state.value.suggestions.isEmpty())
+        assertEquals(0, repo.total.first())
+        val next = "8996603421269968986"
+        repeat(3) { scanner.reading(SerialRecognition.read(emptyList(), listOf(next))) }
+        assertEquals(listOf(next), scanner.state.value.suggestions)
+    }
+    @Test fun seriesSharesReviewAndTransferApprovalsWithScannedValues() = runTest {
+        val target = repo.createGroup("000055", "سارة")
+        val source = repo.createGroup("000056", "أحمد")
+        val rows = SerialSeries.generate("8996603421269968985", "8999")
+        repo.addNewSims(rows.take(2), source)
+        val scanner = vm(initial = target)
+        scanner.add(rows.last())
+        assertTrue(scanner.series(rows.first(), "8999"))
+        scanner.state.first { !it.busy && it.plan != null }
+        assertEquals(15, scanner.state.value.serials.size)
+        scanner.approve(rows.first(), true) // second conflict deliberately refused
+        scanner.remove(rows[2])
+        scanner.state.first { !it.busy && it.plan != null }
+        scanner.approve(rows.first(), true)
+        scanner.save()
+        val result = scanner.state.first { !it.busy && it.result != null }.result
+        assertEquals(ScanResult(12, 1, 1), result)
+        assertEquals(source, repo.findSerials(listOf(rows[1])).single().groupId)
+        assertEquals(13, repo.sims(target).first().size)
+    }
+
 }

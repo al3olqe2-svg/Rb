@@ -33,7 +33,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.util.concurrent.Executors
 
 @Composable
-fun CameraPanel(modifier: Modifier, reading: (SerialRecognition.Reading) -> Unit, error: (String) -> Unit) {
+fun CameraPanel(modifier: Modifier, reading: (SerialRecognition.Reading) -> Unit, error: (String) -> Unit, group: Boolean = false) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current
     var granted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
@@ -67,7 +67,7 @@ fun CameraPanel(modifier: Modifier, reading: (SerialRecognition.Reading) -> Unit
     Box(modifier) {
         AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
         Box(Modifier.align(Alignment.Center).fillMaxWidth(.88f).height(140.dp).border(1.dp, Color.White, MaterialTheme.shapes.medium))
-        Text("شريحة واحدة · قرّب الرقم داخل الإطار · المس للتركيز", Modifier.align(Alignment.TopCenter).padding(8.dp), color = Color.White,
+        Text(if (group) "رقم المجموعة داخل الإطار · المس للتركيز" else "شريحة واحدة · قرّب الرقم داخل الإطار · المس للتركيز", Modifier.align(Alignment.TopCenter).padding(8.dp), color = Color.White,
             style = MaterialTheme.typography.labelSmall)
         if (camera?.cameraInfo?.hasFlashUnit() == true) FilledTonalButton(onClick = { torch = !torch }, modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)) {
             Text(if (torch) "إطفاء الإضاءة" else "إضاءة")
@@ -79,7 +79,7 @@ fun CameraPanel(modifier: Modifier, reading: (SerialRecognition.Reading) -> Unit
     LaunchedEffect(camera, torch) {
         camera?.cameraControl?.enableTorch(torch)?.addListener({}, ContextCompat.getMainExecutor(context))
     }
-    DisposableEffect(lifecycle, previewView, retry) {
+    DisposableEffect(lifecycle, previewView, retry, group) {
         val executor = Executors.newSingleThreadExecutor()
         val main = ContextCompat.getMainExecutor(context)
         var disposed = false
@@ -98,7 +98,7 @@ fun CameraPanel(modifier: Modifier, reading: (SerialRecognition.Reading) -> Unit
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
         val analyzer = SimAnalyzer(main, {
             if (!disposed && lifecycle.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) latestReading(it)
-        }, { if (!disposed) latestError("تعذرت قراءة إطار الكاميرا. ثبّت الشريحة أو أعد فتح الكاميرا؛ يتوفر التصحيح اليدوي.") })
+        }, { if (!disposed) latestError("تعذرت قراءة إطار الكاميرا. ثبّت الشريحة أو أعد فتح الكاميرا؛ يتوفر التصحيح اليدوي.") }, group)
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
             if (!disposed) try {

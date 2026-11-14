@@ -24,7 +24,7 @@ class ScannerViewModel(
         destination = if (saved.contains("destination")) saved["destination"] else initial,
         review = (saved.get<Boolean>("review") ?: false) || session.serials.isNotEmpty()))
     val state = _state.asStateFlow()
-    private var stable = StableReading()
+    private val stable = TemporalCapture()
     private var lastFeedback: String? = null
     private var feedbackTime = 0L
     init { if (_state.value.review && session.serials.isNotEmpty()) refresh() }
@@ -39,13 +39,33 @@ class ScannerViewModel(
         set(state.value.copy(destination = id, plan = null, approved = emptySet(), error = null))
         if (state.value.review && session.serials.isNotEmpty()) refresh()
     }
-    fun camera() { if (!state.value.busy) { stable = StableReading(); set(state.value.copy(camera = true, review = false, result = null, error = null)) } }
+    fun camera() { if (!state.value.busy) { stable.reset(); set(state.value.copy(camera = true, review = false, result = null, suggestions = emptyList(), message = "وجّه الكاميرا إلى شريحة واحدة", error = null)) } }
     fun review() { if (!state.value.busy) { set(state.value.copy(camera = false, review = true, suggestions = emptyList())); if (session.serials.isNotEmpty()) refresh() } }
     fun reading(reading: SerialRecognition.Reading) {
         if (!state.value.camera || state.value.busy) return
-        set(state.value.copy(suggestions = if (reading.automatic) emptyList() else reading.candidates,
-            message = if (reading.candidates.size > 1) "قراءات مختلفة — اختر الرقم المطابق للشريحة" else state.value.message))
-        stable.accept(reading)?.let { add(it) }
+        val choices = stable.accept(reading, session.serials.toSet())
+        if (choices.isNotEmpty()) set(state.value.copy(suggestions = choices,
+            message = "الرقم جاهز للتأكيد — طابق جميع الخانات", error = null))
+    }
+    fun rescan() {
+        stable.reset()
+        set(state.value.copy(suggestions = emptyList(), message = "وجّه الكاميرا إلى شريحة واحدة"))
+    }
+    fun confirm(serial: String) {
+        if (serial !in state.value.suggestions) return
+        add(serial)
+        rescan()
+    }
+    fun series(first: String, last4: String): Boolean {
+        if (state.value.busy) return false
+        val values = try { SerialSeries.generate(first, last4) } catch (e: IllegalArgumentException) {
+            error(e.message.orEmpty()); return false
+        }
+        val added = values.count { session.add(it) }
+        set(state.value.copy(serials = session.serials, plan = null, approved = emptySet(),
+            message = "أضيفت $added؛ تكرار في الجلسة: ${values.size - added}", error = null))
+        review()
+        return true
     }
     fun add(raw: String) {
         if (state.value.busy) return
