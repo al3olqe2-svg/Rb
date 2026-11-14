@@ -44,3 +44,14 @@ SHA-256 لملف APK المحلي: `d1a7d71f76d867a62c9ef7e695fb8f78a9cbdda69355
 
 ## GitHub
 الفرع `stage-6-transfer-history` مبني على رأس Stage 5 عند `d6e52cbbbc3181424a0833e301b5dc998c21fb28` ويستهدف `stage-5-stable-release`، لأن PR #5 والاعتمادات السابقة بقيت مفتوحة. لا دمج تلقائي. Workflow Android محفوظ مع إضافة فرع الأساس إلى مشغلات PR وتسمية APK artifact `Rb-stage6-debug`.
+
+
+## تحقق Android الفعلي على العينة الاصطناعية
+نجح [Actions run 43556017215](https://github.com/al3olqe2-svg/Rb/actions/runs/43556017215) عند commit `4f2a762`:
+- 114 اختبار JVM، وبناء وLint ناجحان.
+- اختبارا ML Kit الفعليان على API 26: 2/2، دون فشل أو تجاهل. الصورة المستقيمة أعادت الرقمين كاملين وحددت `8996603430263612700` علويًا. اختبارات الدوران تمنع ترجيح السفلي، وتسمح بالرجوع للمراجعة اليدوية؛ لا تدّعي قراءة آلية ناجحة في جميع الزوايا.
+- تثبيت وتشغيل APK وإعادة تثبيته بالتوقيع نفسه نجحا. تمت قراءة AndroidRuntime log من artifact مباشرة، ولا يحتوي FATAL EXCEPTION. اكتُشف أن أمر فحص السجل السابق يعتمد على rg غير المثبت في العامل؛ استُبدل بأمر Python قياسي يفشل أيضًا عند تعذر قراءة السجل.
+- [Debug APK لهذا التشغيل](https://github.com/al3olqe2-svg/Rb/actions/runs/43556017215/artifacts/14097913726) (ملف app-debug.apk داخل ZIP)، و[التقارير](https://github.com/al3olqe2-svg/Rb/actions/runs/43556017215/artifacts/14098212700).
+- نُزّل APK نفسه واجتاز apksigner وzipalign. SHA-256: `3e4991f41195565940efe566875bf7bcbfa78dcfb0fb27980c7e5b4f4a0cb1df`، وشهادته SHA-256: `93ef335dc26a8c60407cc4d39f014620d7a83ef88fa5a0e5abb71ff85770a2ed`، وهي مختلفة عن Stage 5.
+
+التغيير اللاحق لهذا التشغيل يقتصر على إصلاح أمر فحص CI وتوثيق النتائج؛ كود التطبيق والأصول ومخطط Room لم تتغير. نتيجة تشغيل هذا الإصلاح متاحة في Checks الخاصة بطلب الدمج #6.

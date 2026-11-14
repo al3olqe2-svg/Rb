@@ -43,7 +43,7 @@ jobs:
             mkdir -p app/build/reports/device
             adb exec-out screencap -p > app/build/reports/device/api26-launch.png
             adb logcat -d -s AndroidRuntime:E > app/build/reports/device/runtime.log
-            test -z "$(rg 'FATAL EXCEPTION' app/build/reports/device/runtime.log)"
+            python3 -c "from pathlib import Path; raise SystemExit('FATAL EXCEPTION' in Path('app/build/reports/device/runtime.log').read_text())"
       - uses: actions/upload-artifact@v4
         with:
           name: Rb-stage6-debug
