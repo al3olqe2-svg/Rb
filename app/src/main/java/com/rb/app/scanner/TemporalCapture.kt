@@ -29,13 +29,13 @@ class TemporalCapture(
             plausible && (bars >= barcodeHits || hits >= textHits)
         }
         // A longer observed reading blocks its truncated substring; unrelated strings stay separate.
-        val corroborated = if (ready.isEmpty()) emptyList() else (ready + values.filter { v ->
+        fun complete(value: String) = values.none { it.length > value.length && it.contains(value) }
+        val completeReady = ready.filter(::complete)
+        val corroborated = if (completeReady.isEmpty()) emptyList() else (completeReady + values.filter { v ->
             frames.count { v in it.candidates } >= 2 && (group || v.length in 19..20)
         }).distinct()
-        val complete = corroborated.filter { short -> values.none { long ->
-            long.length > short.length && long.contains(short) && frames.count { long in it.candidates } >= 1
-        } }.sortedWith(compareByDescending<String> { v -> frames.count { v in it.barcodeCandidates } }.thenBy { it })
-        if (complete.isNotEmpty()) frozen = complete
+        val choices = corroborated.filter(::complete).sortedWith(compareByDescending<String> { v -> frames.count { v in it.barcodeCandidates } }.thenBy { it })
+        if (choices.isNotEmpty()) frozen = choices
         return frozen
     }
 }
