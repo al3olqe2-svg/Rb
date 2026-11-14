@@ -43,7 +43,10 @@ fun ScannerScreen(repository: InventoryRepository, groups: List<GroupSummary>, i
     val target = state.destination?.let { id -> groups.find { it.group.id == id }?.group?.let { "${it.ownerName} — ${it.code}" } ?: "مجموعة غير متاحة" } ?: "الأرشيف العام"
     BackHandler(enabled = state.camera || state.busy) { if (!state.busy) vm.review() }
     Column(Modifier.fillMaxSize().imePadding()) {
-        Text("مسح الشرائح", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("مسح الشرائح", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            if (!state.camera) TextButton(onClick = { series = true }, enabled = !state.busy) { Text("إضافة سلسلة") }
+        }
         OutlinedButton(onClick = { selecting = true }, enabled = !state.busy && state.result == null, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
             Text("الوجهة: $target · تغيير")
         }
@@ -62,7 +65,7 @@ fun ScannerScreen(repository: InventoryRepository, groups: List<GroupSummary>, i
             }
             if (state.suggestions.isNotEmpty()) {
                 Text("جاهز للتأكيد · طابق الرقم الكامل:", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.labelMedium)
-                LazyColumn(Modifier.heightIn(max = 220.dp)) {
+                LazyColumn(Modifier.heightIn(max = (state.suggestions.size * 100).coerceAtMost(180).dp)) {
                     items(state.suggestions, key = { it }) { serial -> TextButton(onClick = { vm.confirm(serial) }, modifier = Modifier.fillMaxWidth()) { Column { SerialNumber(serial.takeLast(4), true); SerialNumber(serial); Text("تأكيد وإضافة") } } }
                 }
             }
@@ -73,13 +76,12 @@ fun ScannerScreen(repository: InventoryRepository, groups: List<GroupSummary>, i
             LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item {
                     Text(if (state.review) "مراجعة الجلسة · ${state.serials.size} شريحة" else "امسح الشرائح تباعًا", style = MaterialTheme.typography.titleMedium)
-                    Text("لا تُحفظ أية شريحة قبل الضغط على حفظ. الأرقام الملتبسة تتطلب مطابقتها يدويًا.", style = MaterialTheme.typography.bodySmall)
                 }
                 if (state.message.startsWith("أضيفت")) item { Text(state.message, style = MaterialTheme.typography.bodySmall) }
                 if (state.serials.isEmpty()) item { Text("القائمة فارغة. اختر الوجهة ثم ابدأ الكاميرا.", Modifier.padding(vertical = 16.dp)) }
                 state.error?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
                 if (state.busy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-                if (state.review && state.serials.isNotEmpty()) item { OutlinedButton(onClick = vm::refresh, enabled = !state.busy) { Text("تحديث حالات الشرائح") } }
+                if (state.review && state.serials.isNotEmpty() && (state.plan == null || state.error != null)) item { OutlinedButton(onClick = vm::refresh, enabled = !state.busy) { Text("تحديث حالات الشرائح") } }
                 items(state.serials, key = { it }) { serial ->
                     val row = reviewed[serial]
                     Surface(shape = MaterialTheme.shapes.medium, color = if (row?.existing != null && row.existing.groupId != state.destination) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface) {
@@ -104,13 +106,12 @@ fun ScannerScreen(repository: InventoryRepository, groups: List<GroupSummary>, i
                         }
                     }
                 }
-                item { OutlinedButton(onClick = { series = true }, enabled = !state.busy) { Text("إضافة سلسلة") } }
                 item { TextButton(onClick = { adding = true }, enabled = !state.busy) { Text("إدخال يدوي عند تعذر القراءة") } }
             }
             Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
                 FlowRow(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = vm::camera, enabled = !state.busy, modifier = Modifier.weight(1f)) { Text(if (state.serials.isEmpty()) "بدء الكاميرا" else "إضافة بالكاميرا") }
-                    Button(onClick = vm::save, enabled = !state.busy && state.plan != null && state.serials.isNotEmpty(), modifier = Modifier.weight(1f)) { Text(if (state.busy) "جارٍ التحقق…" else "حفظ الدفعة") }
+                    Button(onClick = vm::save, enabled = !state.busy && state.plan != null && state.serials.isNotEmpty(), modifier = Modifier.weight(1f)) { Text(if (state.saving) "جارٍ الحفظ…" else if (state.busy) "جارٍ التحقق…" else "حفظ الدفعة") }
                 }
             }
         }

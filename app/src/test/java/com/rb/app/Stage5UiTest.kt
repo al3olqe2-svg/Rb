@@ -25,7 +25,7 @@ class Stage5UiTest {
     }
     @After fun close() { db.close() }
     private fun series() {
-        compose.onNodeWithText("إضافة سلسلة").performScrollTo().performClick()
+        compose.onNodeWithText("إضافة سلسلة").performClick()
         compose.onNode(hasSetTextAction() and hasText("الرقم الأول")).performTextInput("8996603421269968985")
         compose.onNode(hasSetTextAction() and hasText("آخر أربعة أرقام للنهاية")).performTextInput("8999")
         compose.onNodeWithText("عدد الشرائح: 15").assertExists()
@@ -70,10 +70,42 @@ class Stage5UiTest {
         compose.onNodeWithText("الشخص المسؤول عن هذه المجموعة").assertDoesNotExist()
         screenshot("05-create-group")
     }
+    @Test fun frozenChoicesStaySelectableWhileNewFramesArrive() {
+        val owner = object : androidx.lifecycle.ViewModelStoreOwner {
+            override val viewModelStore = androidx.lifecycle.ViewModelStore()
+        }
+        val scanner = com.rb.app.scanner.ScannerViewModel(repo, androidx.lifecycle.SavedStateHandle(), null)
+        owner.viewModelStore.put("androidx.lifecycle.ViewModelProvider.DefaultKey:com.rb.app.scanner.ScannerViewModel", scanner)
+        compose.setContent {
+            androidx.compose.runtime.CompositionLocalProvider(androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner provides owner) {
+                com.rb.app.ui.RbTheme { com.rb.app.scanner.ScannerScreen(repo, emptyList(), done = { _, _ -> }) }
+            }
+        }
+        val serial = "8996603421269968985"
+        compose.runOnIdle {
+            scanner.camera()
+            repeat(3) { scanner.reading(com.rb.app.scanner.SerialRecognition.read(emptyList(), listOf(serial))) }
+        }
+        compose.onNodeWithText(serial).assertExists()
+        screenshot("06-frozen-candidate-simulated-frames")
+        compose.runOnIdle {
+            repeat(10) { scanner.reading(com.rb.app.scanner.SerialRecognition.read(emptyList(), listOf("8996603421269968999"))) }
+        }
+        compose.onNodeWithText(serial).assertExists()
+        compose.onNodeWithText("تأكيد وإضافة").performClick()
+        compose.onNodeWithText("تأكيد وإضافة").assertDoesNotExist()
+        compose.runOnIdle {
+            Assert.assertEquals(listOf(serial), scanner.state.value.serials)
+            owner.viewModelStore.clear()
+        }
+    }
+
     private fun screenshot(name: String) = compose.runOnIdle {
         val activity = androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance()
             .getActivitiesInStage(androidx.test.runner.lifecycle.Stage.RESUMED).single()
-        val view = activity.window.decorView
+        val view = android.view.inspector.WindowInspector.getGlobalWindowViews()
+            .lastOrNull { it.isAttachedToWindow && it.visibility == android.view.View.VISIBLE }
+            ?: activity.window.decorView
         val bitmap = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
         view.draw(android.graphics.Canvas(bitmap))
         java.io.File("build/reports/screenshots/stage5").mkdirs()

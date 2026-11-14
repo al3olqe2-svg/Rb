@@ -23,7 +23,7 @@ fun CaptureDialog(group: Boolean = false, dismiss: () -> Unit, confirm: (String)
         Surface(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().padding(12.dp)) {
                 Text(if (group) "مسح رقم المجموعة" else "مسح أول شريحة", style = MaterialTheme.typography.titleMedium)
-                CameraPanel(Modifier.fillMaxWidth().weight(1f), { choices = gate.accept(it) }, { error = it }, group)
+                CameraPanel(Modifier.fillMaxWidth().weight(1f), { if (choices.isEmpty()) choices = gate.accept(it) }, { error = it }, group)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 if (choices.isNotEmpty()) {
                     Text("جاهز للتأكيد")

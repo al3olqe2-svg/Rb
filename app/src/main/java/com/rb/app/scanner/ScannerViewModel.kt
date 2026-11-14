@@ -14,7 +14,7 @@ data class ScannerState(
     val camera: Boolean = false, val review: Boolean = false,
     val suggestions: List<String> = emptyList(), val message: String = "وجّه الكاميرا إلى شريحة واحدة",
     val last: String? = null, val plan: ScanPlan? = null, val approved: Set<String> = emptySet(),
-    val busy: Boolean = false, val error: String? = null, val result: ScanResult? = null,
+    val busy: Boolean = false, val saving: Boolean = false, val error: String? = null, val result: ScanResult? = null,
 )
 class ScannerViewModel(
     private val repository: InventoryRepository, private val saved: SavedStateHandle, initial: String?,
@@ -108,14 +108,14 @@ class ScannerViewModel(
             try { set(state.value.copy(plan = repository.reviewScan(snapshot.serials, snapshot.destination))) }
             catch (e: CancellationException) { throw e }
             catch (e: Exception) { error(if (e is InventoryException) e.message.orEmpty() else "تعذر التحقق من البيانات. حاول تحديث الحالات.") }
-            finally { set(state.value.copy(busy = false)) }
+            finally { set(state.value.copy(busy = false, saving = false)) }
         }
     }
     fun save() {
         val snapshot = state.value
         val plan = snapshot.plan ?: return
         if (snapshot.busy || snapshot.result != null) return
-        set(snapshot.copy(busy = true, error = null))
+        set(snapshot.copy(busy = true, saving = true, error = null))
         viewModelScope.launch {
             try {
                 val result = repository.saveScan(plan, snapshot.approved)
@@ -126,7 +126,7 @@ class ScannerViewModel(
                 if (e is StaleScanException || e is InventoryException.MissingGroup)
                     set(state.value.copy(plan = null, approved = emptySet()))
                 error(when (e) { is StaleScanException, is InventoryException -> e.message.orEmpty(); else -> "تعذر حفظ الدفعة. لم تُحفظ تغييرات جزئية؛ أعد المحاولة." })
-            } finally { set(state.value.copy(busy = false)) }
+            } finally { set(state.value.copy(busy = false, saving = false)) }
         }
     }
 }

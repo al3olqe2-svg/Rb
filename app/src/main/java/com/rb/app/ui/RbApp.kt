@@ -221,7 +221,7 @@ private fun CreateScreen(vm: InventoryViewModel, back: () -> Unit) {
                     trailingIcon = { IconButton(onClick = { scanning = true }, enabled = !busy) { Icon(Icons.Outlined.QrCodeScanner, "مسح رقم المجموعة") } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     textStyle = TextStyle(fontFamily = NumberFont, textDirection = TextDirection.Ltr),
                     singleLine = true, isError = badCode, enabled = !busy, modifier = Modifier.fillMaxWidth(),
-                    supportingText = { if (badCode) Text("أدخل من 1 إلى 64 خانة رقمية") })
+                    supportingText = if (badCode) { { Text("أدخل من 1 إلى 64 خانة رقمية") } } else null)
             }
             item { OwnerField(owner, { owner = it; vm.clearError() }, badOwner, !busy) }
             item {
@@ -242,7 +242,7 @@ private fun CreateScreen(vm: InventoryViewModel, back: () -> Unit) {
 private fun OwnerField(owner: String, change: (String) -> Unit, invalid: Boolean, enabled: Boolean) {
     OutlinedTextField(value = owner, onValueChange = change, label = { Text("اسم المسؤول") }, singleLine = true,
         enabled = enabled, isError = invalid, modifier = Modifier.fillMaxWidth(),
-        supportingText = { if (invalid) Text("أدخل اسمًا من 1 إلى 120 حرفًا") })
+        supportingText = if (invalid) { { Text("أدخل اسمًا من 1 إلى 120 حرفًا") } } else null)
 }
 
 @Composable
